@@ -1,0 +1,47 @@
+~ROML~
+name="Alice Johnson"
+age:30
+active<true>
+email~alice.johnson@example.com
+//salary//85000
+balance$15000
+@created@2024-01-01@
+status=yes
+//department//Engineering
+title~Senior Developer
+tags||developer||senior||team-lead||
+permissions=admin
+address{
+  street="123 Main Street"
+  city:Springfield
+  active<true>
+  country~USA
+  //zipcode//12345
+  coordinates$null
+  @updated@2024-06-15@
+  verified=yes
+}
+projects[
+  [0]{
+    name="Project Alpha"
+    budget:50000
+    active<true>
+    description~A comprehensive software solution
+    //priority//high
+    completion$75
+    @deadline@2024-12-31@
+    status=in-progress
+  }
+  [1]{
+    name="Project Beta"
+    budget:30000
+    completed<false>
+    description~Legacy system maintenance
+    //priority//medium
+    completion$25
+    @deadline@2024-09-30@
+    status=planning
+  }
+]
+//notes//Remember to review quarterly goals
+metadata$__NULL__

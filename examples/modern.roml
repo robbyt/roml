@@ -1,0 +1,26 @@
+~ROML~
+name="Alice"
+&age&30
+active<true>
+email="alice@example.com"
+//salary//75000
+@created@2024-01-01@
+tags||dev||admin||
+items[
+  [0]{
+    &id&1
+    name="First Item"
+  }
+  [1]{
+    &id&2
+    name="Second Item"
+  }
+]
+//nullValue//__NULL__
+emptyString="__EMPTY__"
+//whitespace//   spaces   
+config{
+  enabled<true>
+  disabled<false>
+  description="A nested configuration object"
+}
