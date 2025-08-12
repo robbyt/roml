@@ -1,8 +1,8 @@
 ~ROML~
-name="Alice Johnson"
+name="Robert Johnson"
 age:30
 active<true>
-email~alice.johnson@example.com
+email~robert.johnson@example.com
 //salary//85000
 balance$15000
 @created@2024-01-01@

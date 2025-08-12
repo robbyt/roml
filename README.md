@@ -42,10 +42,10 @@ npm install roml
 
 ```bash
 # Convert JSON to ROML
-echo '{"name":"Alice","age":30}' | roml encode
+echo '{"name":"Robert","age":30}' | roml encode
 
 # Convert ROML to JSON  
-echo 'name="Alice"' | roml decode
+echo 'name="Robert"' | roml decode
 
 # File conversion
 cat data.json | roml encode > output.roml
@@ -58,7 +58,7 @@ cat input.roml | roml decode > output.json
 import { RomlFile } from 'roml';
 
 // Convert JSON to ROML
-const jsonData = { name: "Alice", age: 30, active: true };
+const jsonData = { name: "Robert", age: 30, active: true };
 const romlContent = RomlFile.jsonToRoml(jsonData);
 
 // Convert ROML back to JSON
@@ -78,10 +78,10 @@ ROML uses different syntax styles based on content analysis and line position:
 
 ```roml
 ~ROML~
-name="Alice"              // Line 1 (odd): Personal info uses quoted style
+name="Robert"             // Line 1 (odd): Personal info uses quoted style
 age:30                    // Line 2 (even): Numbers use colon style
 active<true>              // Line 3 (odd): Booleans use bracket style
-email~alice@example.com   // Line 4 (even): Vowel-starting keys use tilde style
+email~robert@example.com  // Line 4 (even): Vowel-starting keys use tilde style
 //salary//50000           // Line 5 (odd): Financial info uses fake comment style
 balance$1000              // Line 6 (even): Numbers use dollar style
 @created@2024-01-15@      // Line 7 (odd): Temporal info uses at-sandwich style

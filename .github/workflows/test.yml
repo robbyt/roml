@@ -38,8 +38,8 @@ jobs:
       
       - name: Test CLI functionality
         run: |
-          echo '{"name":"Alice","age":30,"active":true}' | node dist/cli.js encode
-          echo 'name="Alice"' | node dist/cli.js decode
+          echo '{"name":"Robert","age":30,"active":true}' | node dist/cli.js encode
+          echo 'name="Robert"' | node dist/cli.js decode
       
       - name: Test round-trip conversion with examples
         run: |
