@@ -13,8 +13,8 @@ Usage:
   roml help       Show this help message
 
 Examples:
-  echo '{"name":"Alice","age":30}' | roml encode
-  echo 'name="Alice"' | roml decode
+  echo '{"name":"Robert","age":30}' | roml encode
+  echo 'name="Robert"' | roml decode
   cat data.json | roml encode > output.roml
   cat input.roml | roml decode > output.json
 `);

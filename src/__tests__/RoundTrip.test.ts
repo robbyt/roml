@@ -5,7 +5,7 @@ describe('ROML Round-Trip Conversion Tests', () => {
     {
       name: 'Simple Object',
       data: {
-        name: 'John',
+        name: 'Robert',
         age: 30,
         active: true,
       },
@@ -15,8 +15,8 @@ describe('ROML Round-Trip Conversion Tests', () => {
       data: {
         user: {
           profile: {
-            name: 'Alice',
-            email: 'alice@example.com',
+            name: 'Robert',
+            email: 'robert@example.com',
             preferences: {
               theme: 'dark',
               notifications: true,
@@ -77,8 +77,8 @@ describe('ROML Round-Trip Conversion Tests', () => {
       name: 'Semantic Categories',
       data: {
         // Personal info (should use quoted style)
-        name: 'Bob',
-        email: 'bob@test.com',
+        name: 'Robert',
+        email: 'robert@test.com',
         phone: '555-0123',
 
         // Status flags (should use bracket style)
@@ -222,7 +222,7 @@ describe('ROML Round-Trip Conversion Tests', () => {
     it('should handle nested objects with varying syntax', () => {
       const data = {
         user: {
-          name: 'Alice',
+          name: 'Robert',
           profile: {
             active: true,
             tags: ['dev', 'admin'],
@@ -268,7 +268,7 @@ describe('ROML Round-Trip Conversion Tests', () => {
   describe('Alternating Line Behavior', () => {
     it('should apply different syntax styles for odd and even lines', () => {
       const data = {
-        name: 'Alice', // Line 1 (odd) - should be quoted style
+        name: 'Robert', // Line 1 (odd) - should be quoted style
         age: 30, // Line 2 (even) - should be colon style for numbers
         active: true, // Line 3 (odd) - should be bracket style for booleans
         email: 'test@example.com', // Line 4 (even) - should be tilde style (vowel-starting)
@@ -277,7 +277,7 @@ describe('ROML Round-Trip Conversion Tests', () => {
       const romlContent = RomlFile.jsonToRoml(data);
 
       // Check for alternating patterns
-      expect(romlContent).toContain('name="Alice"'); // Line 1: quoted
+      expect(romlContent).toContain('name="Robert"'); // Line 1: quoted
       expect(romlContent).toContain('age:30'); // Line 2: colon
       expect(romlContent).toContain('active<true>'); // Line 3: brackets
       expect(romlContent).toContain('email~test@example.com'); // Line 4: tilde
@@ -320,7 +320,7 @@ flag4=no`;
       const data = {
         user: {
           // Line 1 (odd) - object
-          name: 'Bob', // Line 2 (even) - tilde style (vowel-free)
+          name: 'Robert', // Line 2 (even) - equals style (consonant-starting, short)
           age: 25, // Line 3 (odd) - ampersand style for numbers
           active: true, // Line 4 (even) - equals with yes
         },

@@ -49,7 +49,7 @@ demo: build
 	@echo "Converting sample JSON to ROML format..."
 	@echo
 	@echo 'const { RomlFile } = require("./dist/file/RomlFile");' > demo.js
-	@echo 'const data = { name: "Alice", age: 30, active: true, tags: ["dev", "admin"] };' >> demo.js
+	@echo 'const data = { name: "Robert", age: 30, active: true, tags: ["dev", "admin"] };' >> demo.js
 	@echo 'console.log("Input:", JSON.stringify(data, null, 2));' >> demo.js
 	@echo 'const roml = RomlFile.jsonToRoml(data);' >> demo.js
 	@echo 'console.log("\\nROML Output:\\n", roml);' >> demo.js
