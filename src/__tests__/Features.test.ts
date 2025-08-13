@@ -73,23 +73,91 @@ describe('ROML Features Infrastructure', () => {
       expect(typeof converterAny.analyzeLineFeatures).toBe('function');
     });
 
-    it('should return empty features for Phase 1', () => {
+    it('should detect vowel-starting keys', () => {
       const converterAny = converter as any;
 
-      // Test document features analysis
+      // Test vowel-starting keys
+      const vowelKey = converterAny.analyzeLineFeatures('apple', 'fruit');
+      expect(vowelKey.keyStartsWithVowel).toBe(true);
+
+      // Test consonant-starting keys
+      const consonantKey = converterAny.analyzeLineFeatures('banana', 'fruit');
+      expect(consonantKey.keyStartsWithVowel).toBe(false);
+    });
+
+    it('should detect long strings', () => {
+      const converterAny = converter as any;
+
+      // Test short string
+      const shortString = converterAny.analyzeLineFeatures('key', 'short');
+      expect(shortString.hasLongString).toBe(false);
+
+      // Test long string (> 10 characters)
+      const longString = converterAny.analyzeLineFeatures('key', 'this is a very long string');
+      expect(longString.hasLongString).toBe(true);
+    });
+
+    it('should detect special values', () => {
+      const converterAny = converter as any;
+
+      // Test null
+      const nullValue = converterAny.analyzeLineFeatures('key', null);
+      expect(nullValue.isSpecialValue).toBe(true);
+
+      // Test undefined
+      const undefinedValue = converterAny.analyzeLineFeatures('key', undefined);
+      expect(undefinedValue.isSpecialValue).toBe(true);
+
+      // Test empty string
+      const emptyString = converterAny.analyzeLineFeatures('key', '');
+      expect(emptyString.isSpecialValue).toBe(true);
+
+      // Test encoded special values
+      const encodedNull = converterAny.analyzeLineFeatures('key', '__NULL__');
+      expect(encodedNull.isSpecialValue).toBe(true);
+
+      // Test normal value
+      const normalValue = converterAny.analyzeLineFeatures('key', 'normal');
+      expect(normalValue.isSpecialValue).toBe(false);
+    });
+
+    it('should detect nested objects', () => {
+      const converterAny = converter as any;
+
+      // Test object
+      const objectValue = converterAny.analyzeLineFeatures('key', { nested: 'value' });
+      expect(objectValue.isNestedObject).toBe(true);
+
+      // Test array (not object)
+      const arrayValue = converterAny.analyzeLineFeatures('key', ['item1', 'item2']);
+      expect(arrayValue.isNestedObject).toBe(false);
+
+      // Test primitive
+      const primitiveValue = converterAny.analyzeLineFeatures('key', 'string');
+      expect(primitiveValue.isNestedObject).toBe(false);
+    });
+
+    it('should detect large arrays', () => {
+      const converterAny = converter as any;
+
+      // Test small array
+      const smallArray = converterAny.analyzeLineFeatures('key', [1, 2, 3]);
+      expect(smallArray.hasLargeArray).toBe(false);
+
+      // Test large array (> 5 items)
+      const largeArray = converterAny.analyzeLineFeatures('key', [1, 2, 3, 4, 5, 6, 7]);
+      expect(largeArray.hasLargeArray).toBe(true);
+    });
+
+    it('should return document features correctly', () => {
+      const converterAny = converter as any;
+
+      // Test document features analysis (still placeholder)
       const testData = { name: 'Test', value: 123 };
       const documentFeatures = converterAny.analyzeDocumentFeatures(testData);
 
       expect(documentFeatures).toEqual(EMPTY_DOCUMENT_FEATURES);
       expect(documentFeatures.primesDetected).toBe(false);
-
-      // Test line features analysis
-      const lineFeatures = converterAny.analyzeLineFeatures('testKey', 'testValue');
-
-      expect(lineFeatures).toEqual(EMPTY_LINE_FEATURES);
-      expect(lineFeatures.containsPrime).toBe(false);
-      expect(lineFeatures.hasLargeArray).toBe(false);
-      expect(lineFeatures.isNestedObject).toBe(false);
     });
   });
 

@@ -73,32 +73,32 @@ export class RomlConverter {
     context: ConversionContext
   ): { result: string; nextLineNumber: number } {
     const indent = '  '.repeat(context.depth);
-    const lineFeatures = this.analyzeLineFeatures(key, value);
+    const lineFeatures = this.analyzeLineFeatures(key, value, context);
 
     if (value === null) {
       return {
-        result: `${indent}${this.selectSyntax(key, '__NULL__', context)(key, '__NULL__', lineFeatures)}`,
+        result: `${indent}${this.selectSyntax(key, '__NULL__', context, lineFeatures)(key, '__NULL__', lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (value === undefined) {
       return {
-        result: `${indent}${this.selectSyntax(key, '__UNDEFINED__', context)(key, '__UNDEFINED__', lineFeatures)}`,
+        result: `${indent}${this.selectSyntax(key, '__UNDEFINED__', context, lineFeatures)(key, '__UNDEFINED__', lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (typeof value === 'boolean') {
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
+        result: `${indent}${this.selectSyntax(key, value, context, lineFeatures)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (typeof value === 'number') {
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
+        result: `${indent}${this.selectSyntax(key, value, context, lineFeatures)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
@@ -106,12 +106,12 @@ export class RomlConverter {
     if (typeof value === 'string') {
       if (value === '') {
         return {
-          result: `${indent}${this.selectSyntax(key, '__EMPTY__', context)(key, '__EMPTY__', lineFeatures)}`,
+          result: `${indent}${this.selectSyntax(key, '__EMPTY__', context, lineFeatures)(key, '__EMPTY__', lineFeatures)}`,
           nextLineNumber: context.lineNumber + 1,
         };
       }
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
+        result: `${indent}${this.selectSyntax(key, value, context, lineFeatures)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
@@ -282,13 +282,13 @@ export class RomlConverter {
   private selectSyntax(
     key: string,
     value: unknown,
-    context: ConversionContext
+    context: ConversionContext,
+    lineFeatures: LineFeatures
   ): (key: string, value: unknown, features: LineFeatures) => string {
     const isEvenLine = context.lineNumber % 2 === 0;
     const keyHash = this.simpleHash(key);
     const valueType = typeof value;
     const valueLength = String(value).length;
-    const nestingLevel = context.depth;
 
     // Check semantic categories first (apply to both odd and even lines)
     const semanticStyle = this.getSemanticStyle(key);
@@ -319,20 +319,18 @@ export class RomlConverter {
     }
 
     if (valueType === 'string') {
-      const keyStartsWithVowel = /^[aeiouAEIOU]/.test(key);
-
       if (isEvenLine) {
-        if (keyStartsWithVowel) {
+        if (lineFeatures.keyStartsWithVowel) {
           return EVEN_LINE_STYLES.TILDE;
-        } else if (valueLength > 10) {
+        } else if (lineFeatures.hasLongString) {
           return EVEN_LINE_STYLES.HASH;
         } else {
           return EVEN_LINE_STYLES.EQUALS;
         }
       } else {
-        if (keyStartsWithVowel) {
+        if (lineFeatures.keyStartsWithVowel) {
           return SYNTAX_STYLES.QUOTED;
-        } else if (valueLength > 10) {
+        } else if (lineFeatures.hasLongString) {
           return SYNTAX_STYLES.DOUBLE_COLON;
         } else {
           return SYNTAX_STYLES.FAKE_COMMENT;
@@ -341,7 +339,7 @@ export class RomlConverter {
     }
 
     // Handle special values (null, undefined, empty)
-    if (value === '__NULL__' || value === '__UNDEFINED__' || value === '__EMPTY__') {
+    if (lineFeatures.isSpecialValue) {
       if (isEvenLine) {
         return EVEN_LINE_STYLES.DOLLAR;
       } else {
@@ -352,12 +350,12 @@ export class RomlConverter {
     // Fallback selection based on line parity
     if (isEvenLine) {
       const evenStyleNames = Object.keys(EVEN_LINE_STYLES) as EvenLineStyleName[];
-      const selector = (keyHash + nestingLevel + valueLength) % evenStyleNames.length;
+      const selector = (keyHash + lineFeatures.nestingDepth + valueLength) % evenStyleNames.length;
       const styleName = evenStyleNames[selector];
       return EVEN_LINE_STYLES[styleName];
     } else {
       const styleNames = Object.keys(SYNTAX_STYLES) as SyntaxStyleName[];
-      const selector = (keyHash + nestingLevel + valueLength) % styleNames.length;
+      const selector = (keyHash + lineFeatures.nestingDepth + valueLength) % styleNames.length;
       const styleName = styleNames[selector];
       return SYNTAX_STYLES[styleName];
     }
@@ -416,10 +414,34 @@ export class RomlConverter {
   }
 
   /**
-   * Analyze line-level features for a key-value pair (Phase 1: placeholder implementation)
+   * Analyze line-level features for a key-value pair
    */
-  private analyzeLineFeatures(key: string, value: unknown): LineFeatures {
-    // Phase 1: Return empty features, actual detection logic will be added in Phase 2
-    return EMPTY_LINE_FEATURES;
+  private analyzeLineFeatures(
+    key: string,
+    value: unknown,
+    context?: ConversionContext
+  ): LineFeatures {
+    const keyStartsWithVowel = /^[aeiouAEIOU]/.test(key);
+    const hasLongString = typeof value === 'string' && value.length > 10;
+    const isSpecialValue =
+      value === '__NULL__' ||
+      value === '__UNDEFINED__' ||
+      value === '__EMPTY__' ||
+      value === null ||
+      value === undefined ||
+      value === '';
+    const isNestedObject = typeof value === 'object' && value !== null && !Array.isArray(value);
+    const hasLargeArray = Array.isArray(value) && value.length > 5;
+    const nestingDepth = context?.depth || 0;
+
+    return {
+      containsPrime: false, // Will be implemented in Phase 2
+      hasLargeArray,
+      isNestedObject,
+      keyStartsWithVowel,
+      hasLongString,
+      isSpecialValue,
+      nestingDepth,
+    };
   }
 }
