@@ -1,4 +1,5 @@
 import { RomlToken } from '../lexer/RomlLexer.js';
+import { MetaTags } from '../types.js';
 
 export interface RomlMetadata {
   checksum: string;
@@ -336,7 +337,7 @@ export class RomlParser {
     // Look for META tag in HEADER token or in the raw value of tokens
     for (const token of this.tokens) {
       if (token.type === 'HEADER' && token.value) {
-        if (token.value.includes('~META~ SIEVE_OF_ERATOSTHENES_INVOKED')) {
+        if (token.value.includes(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)) {
           this.metaTagPresent = true;
           break;
         }
@@ -345,7 +346,7 @@ export class RomlParser {
       if (
         token.value &&
         typeof token.value === 'string' &&
-        token.value.includes('~META~ SIEVE_OF_ERATOSTHENES_INVOKED')
+        token.value.includes(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)
       ) {
         this.metaTagPresent = true;
         break;
@@ -356,14 +357,14 @@ export class RomlParser {
   private validatePrimeConsistency(): void {
     if (this.primesDetected && !this.metaTagPresent) {
       this.errors.push(
-        'Document contains prime-prefixed keys but is missing the required ~META~ SIEVE_OF_ERATOSTHENES_INVOKED tag. ' +
+        `Document contains prime-prefixed keys but is missing the required ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} tag. ` +
           'Add the META tag at the beginning of the document or remove prime prefixes (!).'
       );
     }
 
     if (this.metaTagPresent && !this.primesDetected) {
       this.errors.push(
-        'Document declares ~META~ SIEVE_OF_ERATOSTHENES_INVOKED but contains no prime-prefixed keys. ' +
+        `Document declares ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} but contains no prime-prefixed keys. ` +
           'Remove the META tag or add prime prefixes (!) to keys with prime number values.'
       );
     }

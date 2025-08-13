@@ -1,5 +1,5 @@
 import { RomlConverter } from '../RomlConverter';
-import { EMPTY_DOCUMENT_FEATURES, EMPTY_LINE_FEATURES } from '../types';
+import { EMPTY_DOCUMENT_FEATURES, EMPTY_LINE_FEATURES, MetaTags } from '../types';
 
 describe('ROML Features Infrastructure', () => {
   let converter: RomlConverter;
@@ -194,7 +194,7 @@ describe('ROML Features Infrastructure', () => {
 
         // Phase 2: Should contain META tags when primes are detected
         if (romlOutput.includes('~META~')) {
-          expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+          expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
         }
       });
     });

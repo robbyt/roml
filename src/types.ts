@@ -3,6 +3,13 @@
  */
 
 /**
+ * META tag constants for ROML documents
+ */
+export enum MetaTags {
+  SIEVE_OF_ERATOSTHENES_INVOKED = 'SIEVE_OF_ERATOSTHENES_INVOKED',
+}
+
+/**
  * Document-level features detected during initial scan
  * These features determine META tags and document-wide behavior
  */

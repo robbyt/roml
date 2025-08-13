@@ -3,6 +3,7 @@ import {
   LineFeatures,
   EMPTY_DOCUMENT_FEATURES,
   EMPTY_LINE_FEATURES,
+  MetaTags,
 } from './types.js';
 import { objectContainsPrimes, containsPrime } from './utils/primeUtils.js';
 
@@ -146,7 +147,7 @@ export class RomlConverter {
     const headerLines = ['~ROML~'];
 
     if (documentFeatures.primesDetected) {
-      headerLines.push('# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      headerLines.push(`# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     }
 
     // Future META features would be added here:

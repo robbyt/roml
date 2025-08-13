@@ -1,4 +1,5 @@
 import { RomlConverter } from '../RomlConverter.js';
+import { MetaTags } from '../types.js';
 
 describe('ROML Prime Number Integration', () => {
   let converter: RomlConverter;
@@ -8,7 +9,7 @@ describe('ROML Prime Number Integration', () => {
   });
 
   describe('META Tag Generation', () => {
-    it('should generate SIEVE_OF_ERATOSTHENES_INVOKED when primes detected', () => {
+    it(`should generate ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} when primes detected`, () => {
       const dataWithPrimes = {
         age: 23, // Prime number
         name: 'Alice',
@@ -17,8 +18,10 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(dataWithPrimes);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
-      expect(romlOutput).toMatch(/^~ROML~\n# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED/);
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
+      expect(romlOutput).toMatch(
+        new RegExp(`^~ROML~\\n# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)
+      );
     });
 
     it('should not generate META tag when no primes detected', () => {
@@ -30,7 +33,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(dataWithoutPrimes);
 
-      expect(romlOutput).not.toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).not.toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
       expect(romlOutput).toMatch(/^~ROML~\n/);
       expect(romlOutput).not.toContain('~META~');
     });
@@ -48,7 +51,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(dataWithNestedPrimes);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     });
 
     it('should detect primes in arrays', () => {
@@ -59,7 +62,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(dataWithArrayPrimes);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     });
 
     it('should detect primes in mixed array types', () => {
@@ -70,7 +73,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(dataWithMixedArray);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     });
   });
 
@@ -213,7 +216,7 @@ describe('ROML Prime Number Integration', () => {
       const romlOutput = converter.jsonToRoml(originalData);
 
       // Verify META tag is present
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
 
       // Note: Full round-trip testing would require parser implementation
       // For now, verify ROML format is correct
@@ -237,8 +240,8 @@ describe('ROML Prime Number Integration', () => {
       expect(output1).toBe(output2);
 
       // Both should have META tag
-      expect(output1).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
-      expect(output2).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(output1).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
+      expect(output2).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     });
   });
 
@@ -267,7 +270,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(testData);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
       expect(romlOutput).toMatch(/!largePrime/);
       expect(romlOutput).not.toMatch(/!largeComposite/);
     });
@@ -284,7 +287,7 @@ describe('ROML Prime Number Integration', () => {
       const romlOutput = converter.jsonToRoml(testData);
 
       // Should not generate META tag for empty structures
-      expect(romlOutput).not.toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).not.toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
       expect(romlOutput).not.toContain('!');
     });
 
@@ -296,7 +299,7 @@ describe('ROML Prime Number Integration', () => {
 
       const romlOutput = converter.jsonToRoml(testData);
 
-      expect(romlOutput).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
       expect(romlOutput).toMatch(/!mixedWithPrime/);
       expect(romlOutput).not.toMatch(/!mixedWithoutPrime/);
     });
@@ -315,7 +318,7 @@ describe('ROML Prime Number Integration', () => {
       // Verify structure: ~ROML~ line, META line, then data lines
       const lines = romlOutput.split('\n');
       expect(lines[0]).toBe('~ROML~');
-      expect(lines[1]).toBe('# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(lines[1]).toBe(`# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
       expect(lines[2]).toMatch(/!first/); // Prime on line 2 (even)
       expect(lines[3]).toMatch(/!second/); // Prime on line 3 (odd)
       expect(lines[4]).not.toMatch(/!/); // Not prime on line 4 (even)

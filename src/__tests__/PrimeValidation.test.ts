@@ -2,6 +2,7 @@ import { RomlFile } from '../file/RomlFile.js';
 import { RomlConverter } from '../RomlConverter.js';
 import { RomlLexer } from '../lexer/RomlLexer.js';
 import { RomlParser } from '../parser/RomlParser.js';
+import { MetaTags } from '../types.js';
 
 describe('Prime Number META Tag Validation', () => {
   describe('Round-trip conversion with primes', () => {
@@ -19,7 +20,7 @@ describe('Prime Number META Tag Validation', () => {
       const roml = converter.jsonToRoml(input);
 
       // Should have META tag
-      expect(roml).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(roml).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
 
       // Parse it back
       const lexer = new RomlLexer(roml);
@@ -50,7 +51,7 @@ nested{
       // Should have parse error
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toContain(
-        'missing the required ~META~ SIEVE_OF_ERATOSTHENES_INVOKED tag'
+        `missing the required ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} tag`
       );
       expect(result.errors[0]).toContain('Add the META tag at the beginning');
       expect(result.primeValidation?.metaTagPresent).toBe(false);
@@ -60,7 +61,7 @@ nested{
     it('should fail when META tag is present but no primes exist', () => {
       // Manually create ROML with META tag but no primes
       const romlWithMetaNoPrimes = `~ROML~
-# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}
 composite="4"
 another="6"
 value="8"`;
@@ -73,7 +74,7 @@ value="8"`;
       // Should have fatal parse error
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toContain(
-        'declares ~META~ SIEVE_OF_ERATOSTHENES_INVOKED but contains no prime-prefixed keys'
+        `declares ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} but contains no prime-prefixed keys`
       );
       expect(result.errors[0]).toContain('Remove the META tag or add prime prefixes');
       expect(result.primeValidation?.metaTagPresent).toBe(true);
@@ -82,7 +83,7 @@ value="8"`;
 
     it('should fail with actionable error when prime prefix used on non-prime value', () => {
       const romlWithInvalidPrime = `~ROML~
-# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}
 !notPrime="8"
 !actualPrime="7"`;
 
@@ -156,7 +157,7 @@ value="8"`;
 
       const file = RomlFile.fromJSON(input);
       const roml = file.toRoml();
-      expect(roml).toContain('~META~ SIEVE_OF_ERATOSTHENES_INVOKED');
+      expect(roml).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
 
       const parsed = file.toJSON();
       expect(parsed).toEqual(input);
@@ -208,7 +209,7 @@ regular="value"`;
 
     it('should provide helpful error when user incorrectly marks non-prime', () => {
       const manualRoml = `~ROML~
-# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}
 !wrongPrime="10"`;
 
       const lexer = new RomlLexer(manualRoml);
@@ -223,7 +224,7 @@ regular="value"`;
 
     it('should successfully parse manually edited ROML with correct prime prefixes', () => {
       const manualRoml = `~ROML~
-# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}
 !firstPrime="2"
 !secondPrime="3"
 composite="4"
