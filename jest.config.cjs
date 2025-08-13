@@ -14,5 +14,6 @@ module.exports = {
     '!src/**/*.d.ts',
     '!src/**/*.test.ts',
     '!src/**/*.spec.ts',
+    '!src/cli.ts', // Exclude minimal entry point with import.meta from coverage
   ],
 };
