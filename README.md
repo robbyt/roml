@@ -10,7 +10,7 @@ Following the style of many other serialization or document formats, ROML is bot
 
 Each ROML document begins with the `~ROML~` header, followed by data encoded using many different syntax styles. Different delimiters are required based on key characteristics, such as hard-coded semantic categories, line position, and the presence of certain characters in keys or values.
 
-ROML alternates behavior for even or odd lines in the document. Odd-numbered lines use one set of eight syntax styles, while even-numbered lines use a different set of eight styles. Boolean values are `<true>` on odd lines and `=yes` on even lines.
+ROML alternates behavior for even or odd lines in the document. Odd-numbered lines use one set of eight syntax styles, while even-numbered lines use a different set of eight styles. Boolean values are `<true>` on odd lines and vary by context on even lines.
 
 ROML's syntax selection works deterministically based on key names, value types, line positions, semantic categorization, and nesting depth. Identical JSON input produces identical ROML output.
 
@@ -83,12 +83,12 @@ age:30                    // Line 2 (even): Numbers use colon style
 active<true>              // Line 3 (odd): Booleans use bracket style
 email~robert@example.com  // Line 4 (even): Vowel-starting keys use tilde style
 //salary//50000           // Line 5 (odd): Financial info uses fake comment style
-balance$1000              // Line 6 (even): Numbers use dollar style
+balance:1000              // Line 6 (even): Numbers use colon style
 @created@2024-01-15@      // Line 7 (odd): Temporal info uses at-sandwich style
 tags<user><admin>         // Line 8 (even): Arrays use brackets
 settings{                 // Objects span multiple lines
-  theme="dark"            // Nested content follows same alternating rules
-  notifications=no        // Even lines use yes/no for booleans
+  theme=dark              // Nested content follows same alternating rules
+  notifications<false>    // Nested booleans use bracket style
 }
 ```
 
@@ -123,6 +123,33 @@ The same JSON structure always produces identical ROML output. The alternating p
 - **Null values**: `__NULL__`
 - **Empty strings**: `__EMPTY__`
 - **Whitespace**: Preserved exactly as-is
+
+### Prime Number Handling
+
+ROML includes automatic prime number detection that affects both syntax and metadata:
+
+**Prime Detection Features:**
+- **Automatic detection**: All numeric values are checked for primality using the Sieve of Eratosthenes
+- **Prime prefixes**: Keys with prime values get a `!` prefix (e.g., `!score:7` instead of `score:7`)
+- **META tag generation**: Documents containing primes automatically include `# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED`
+- **Cross-syntax support**: Prime prefixes work with all 16 syntax styles (odd/even line patterns)
+
+**Prime Examples:**
+
+```roml
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+!score:7                  // Line 1: 7 is prime, gets ! prefix
+&!rating&13               // Line 2: 13 is prime, gets ! prefix  
+count:4                   // Line 3: 4 is not prime, no prefix
+```
+
+**Validation Rules:**
+- Prime prefixes (`!`) are only valid when the value is actually prime
+- Documents with prime prefixes must include the `# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED` tag
+- Documents with the META tag must contain actual prime-prefixed keys
+- Invalid prime usage results in parsing errors with specific guidance
+- The Sieve of Eratosthenes provides reliable prime detection up to 10,000
 
 ## Development
 
