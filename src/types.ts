@@ -20,9 +20,12 @@ export interface DocumentFeatures {
  */
 export interface LineFeatures {
   readonly containsPrime: boolean;
-  readonly hasLargeArray: boolean; // example future feature
-  readonly isNestedObject: boolean; // example future feature
-  // Additional line-level features can be added as needed
+  readonly hasLargeArray: boolean;
+  readonly isNestedObject: boolean;
+  readonly keyStartsWithVowel: boolean;
+  readonly hasLongString: boolean;
+  readonly isSpecialValue: boolean;
+  readonly nestingDepth: number;
 }
 
 /**
@@ -39,4 +42,8 @@ export const EMPTY_LINE_FEATURES: LineFeatures = {
   containsPrime: false,
   hasLargeArray: false,
   isNestedObject: false,
+  keyStartsWithVowel: false,
+  hasLongString: false,
+  isSpecialValue: false,
+  nestingDepth: 0,
 } as const;
