@@ -74,13 +74,10 @@ export class RomlParser {
     this.position = 0;
     this.errors = [];
 
-    // Build AST
     const ast = this.buildAST();
 
-    // Extract data from AST
     const data = this.astToData(ast);
 
-    // Create simplified metadata
     const metadata = this.createMetadata();
 
     return {
@@ -96,7 +93,6 @@ export class RomlParser {
     const startOffset = 0;
     const endOffset = this.tokens[this.tokens.length - 1]?.endOffset || 0;
 
-    // Build root object from tokens
     const body = this.parseObject();
 
     return {
@@ -120,7 +116,6 @@ export class RomlParser {
 
       if (!token || token.type === 'EOF') break;
 
-      // Stop if we hit a closing token at our depth or shallower
       if (
         (token.type === 'OBJECT_END' || token.type === 'ARRAY_END') &&
         (token.depth || 0) <= expectedDepth
@@ -159,7 +154,7 @@ export class RomlParser {
   private parseChildObject(token: RomlToken): RomlObjectNode | null {
     if (!token.key) return null;
 
-    this.advance(); // consume OBJECT_START
+    this.advance();
     const childObject = this.parseObject(token.key, (token.depth || 0) + 1);
     return childObject;
   }
@@ -167,26 +162,23 @@ export class RomlParser {
   private parseChildArray(token: RomlToken): RomlArrayNode | null {
     if (!token.key) return null;
 
-    this.advance(); // consume ARRAY_START
+    this.advance();
     const items: (RomlValueNode | RomlObjectNode)[] = [];
 
-    // Parse array items until ARRAY_END
     while (this.position < this.tokens.length) {
       const current = this.current();
       if (!current || current.type === 'EOF') break;
 
       if (current.type === 'ARRAY_END' && (current.depth || 0) <= (token.depth || 0)) {
-        this.advance(); // consume ARRAY_END
+        this.advance();
         break;
       }
 
       if (current.type === 'ARRAY_ITEM') {
-        // Structured array item: [index]{
-        this.advance(); // consume ARRAY_ITEM
+        this.advance();
         const itemObject = this.parseObject(current.key, (current.depth || 0) + 1);
         items.push(itemObject);
       } else if (current.type === 'KEY_VALUE') {
-        // This shouldn't happen in well-formed structured arrays
         this.advance();
       } else {
         this.advance();
@@ -228,12 +220,10 @@ export class RomlParser {
   private objectNodeToData(node: RomlObjectNode): Record<string, any> {
     const result: Record<string, any> = {};
 
-    // Add key-value properties
     for (const prop of node.properties) {
       result[prop.key] = prop.value;
     }
 
-    // Add child objects and arrays
     for (const child of node.children) {
       if (child.type === 'object') {
         result[child.key!] = this.objectNodeToData(child);
@@ -264,7 +254,6 @@ export class RomlParser {
     };
   }
 
-  // Helper methods
   private current(): RomlToken | undefined {
     return this.tokens[this.position];
   }
@@ -284,9 +273,5 @@ export class RomlParser {
 
   private findTokenOfType(type: RomlToken['type']): RomlToken | undefined {
     return this.tokens.find((token) => token.type === type);
-  }
-
-  private addError(message: string): void {
-    this.errors.push(message);
   }
 }

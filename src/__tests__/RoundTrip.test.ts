@@ -116,10 +116,7 @@ describe('ROML Round-Trip Conversion Tests', () => {
         const roml1 = RomlFile.jsonToRoml(data);
         const roml2 = RomlFile.jsonToRoml(data);
 
-        // In stateless design, seeds are ignored - output should be identical
         expect(roml1).toBe(roml2);
-
-        // Data should be identical when parsed back
         const json1 = RomlFile.romlToJson(roml1);
         const json2 = RomlFile.romlToJson(roml2);
         expect(json1).toEqual(json2);

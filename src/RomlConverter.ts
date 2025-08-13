@@ -1,4 +1,3 @@
-// Use const assertions and readonly for better TypeScript
 const SYNTAX_STYLES = {
   QUOTED: (key: string, value: unknown) => `${key}="${value}"`,
   AMPERSAND: (key: string, value: unknown) => `&${key}&${value}`,
@@ -35,7 +34,6 @@ interface ConversionContext {
   readonly lineNumber: number;
 }
 
-// Use const assertion for semantic categories
 const SEMANTIC_CATEGORIES = {
   PERSONAL: ['name', 'first_name', 'last_name', 'email', 'phone', 'address', 'username'] as const,
   STATUS: ['active', 'enabled', 'valid', 'working', 'online', 'disabled', 'inactive'] as const,
@@ -131,7 +129,7 @@ export class RomlConverter {
     );
 
     if (hasObjects) {
-      let currentLineNumber = context.lineNumber + 1; // Account for array start line
+      let currentLineNumber = context.lineNumber + 1;
       const newContext: ConversionContext = {
         ...context,
         depth: context.depth + 1,
@@ -156,7 +154,7 @@ export class RomlConverter {
 
       return {
         result: `${indent}${key}[\n${arrayItems.join('\n')}\n${indent}]`,
-        nextLineNumber: currentLineNumber + 1, // Account for array end line
+        nextLineNumber: currentLineNumber + 1,
       };
     }
 
@@ -227,7 +225,7 @@ export class RomlConverter {
       const key = keyOrObj;
       const obj = objOrContext;
       const indent = '  '.repeat(context.depth);
-      let currentLineNumber = context.lineNumber + 1; // Account for object start line
+      let currentLineNumber = context.lineNumber + 1;
 
       const newContext: ConversionContext = {
         ...context,
@@ -246,7 +244,7 @@ export class RomlConverter {
 
       return {
         result: `${indent}${key}{\n${entries.join('\n')}\n${indent}}`,
-        nextLineNumber: currentLineNumber + 1, // Account for object end line
+        nextLineNumber: currentLineNumber + 1,
       };
     } else {
       const obj = keyOrObj;
