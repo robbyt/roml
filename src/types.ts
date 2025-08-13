@@ -3,6 +3,13 @@
  */
 
 /**
+ * META tag constants for ROML documents
+ */
+export enum MetaTags {
+  SIEVE_OF_ERATOSTHENES_INVOKED = 'SIEVE_OF_ERATOSTHENES_INVOKED',
+}
+
+/**
  * Document-level features detected during initial scan
  * These features determine META tags and document-wide behavior
  */
@@ -26,6 +33,7 @@ export interface LineFeatures {
   readonly hasLongString: boolean;
   readonly isSpecialValue: boolean;
   readonly nestingDepth: number;
+  readonly needsQuotes: boolean;
 }
 
 /**
@@ -46,4 +54,5 @@ export const EMPTY_LINE_FEATURES: LineFeatures = {
   hasLongString: false,
   isSpecialValue: false,
   nestingDepth: 0,
+  needsQuotes: false,
 } as const;

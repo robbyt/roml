@@ -3,29 +3,94 @@ import {
   LineFeatures,
   EMPTY_DOCUMENT_FEATURES,
   EMPTY_LINE_FEATURES,
+  MetaTags,
 } from './types.js';
+import { objectContainsPrimes, containsPrime } from './utils/primeUtils.js';
 
 const SYNTAX_STYLES = {
-  QUOTED: (key: string, value: unknown, features: LineFeatures) => `${key}="${value}"`,
-  AMPERSAND: (key: string, value: unknown, features: LineFeatures) => `&${key}&${value}`,
-  BRACKETS: (key: string, value: unknown, features: LineFeatures) => `${key}<${value}>`,
-  PIPES: (key: string, value: unknown, features: LineFeatures) => `||${key}||${value}||`,
-  DOUBLE_COLON: (key: string, value: unknown, features: LineFeatures) => `::${key}::${value}::`,
-  FAKE_COMMENT: (key: string, value: unknown, features: LineFeatures) => `//${key}//${value}`,
-  AT_SANDWICH: (key: string, value: unknown, features: LineFeatures) => `@${key}@${value}@`,
-  UNDERSCORE: (key: string, value: unknown, features: LineFeatures) => `_${key}_${value}_`,
+  QUOTED: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    return `${prefix}${key}="${value}"`;
+  },
+  AMPERSAND: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `&${prefix}${key}&${quotedValue}`;
+  },
+  BRACKETS: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}<${quotedValue}>`;
+  },
+  PIPES: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `||${prefix}${key}||${quotedValue}||`;
+  },
+  DOUBLE_COLON: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `::${prefix}${key}::${quotedValue}::`;
+  },
+  FAKE_COMMENT: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `//${prefix}${key}//${quotedValue}`;
+  },
+  AT_SANDWICH: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `@${prefix}${key}@${quotedValue}@`;
+  },
+  UNDERSCORE: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `_${prefix}${key}_${quotedValue}_`;
+  },
 } as const;
 
 // Alternative syntax styles for even lines
 const EVEN_LINE_STYLES = {
-  EQUALS: (key: string, value: unknown, features: LineFeatures) => `${key}=${value}`,
-  COLON: (key: string, value: unknown, features: LineFeatures) => `${key}:${value}`,
-  TILDE: (key: string, value: unknown, features: LineFeatures) => `${key}~${value}`,
-  HASH: (key: string, value: unknown, features: LineFeatures) => `${key}#${value}`,
-  PERCENT: (key: string, value: unknown, features: LineFeatures) => `${key}%${value}`,
-  DOLLAR: (key: string, value: unknown, features: LineFeatures) => `${key}$${value}`,
-  CARET: (key: string, value: unknown, features: LineFeatures) => `${key}^${value}`,
-  PLUS: (key: string, value: unknown, features: LineFeatures) => `${key}+${value}`,
+  EQUALS: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}=${quotedValue}`;
+  },
+  COLON: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}:${quotedValue}`;
+  },
+  TILDE: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}~${quotedValue}`;
+  },
+  HASH: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}#${quotedValue}`;
+  },
+  PERCENT: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}%${quotedValue}`;
+  },
+  DOLLAR: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}$${quotedValue}`;
+  },
+  CARET: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}^${quotedValue}`;
+  },
+  PLUS: (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const quotedValue = features.needsQuotes ? `"${value}"` : value;
+    return `${prefix}${key}+${quotedValue}`;
+  },
 } as const;
 
 type SyntaxStyleName = keyof typeof SYNTAX_STYLES;
@@ -52,19 +117,53 @@ const SEMANTIC_CATEGORIES = {
 } as const;
 
 export class RomlConverter {
+  /**
+   * Check if a string value looks like another type and needs quotes to preserve string type
+   */
+  private isAmbiguousString(value: string): boolean {
+    // Check if string looks like a number
+    const num = parseFloat(value);
+    if (!isNaN(num) && String(num) === value) return true;
+
+    // Check if string looks like boolean
+    if (value === 'true' || value === 'false') return true;
+
+    // Check if string looks like null
+    if (value === 'null') return true;
+
+    // Check if string matches special values
+    if (value === '__NULL__' || value === '__EMPTY__' || value === '__UNDEFINED__') return true;
+
+    // Check if string is yes/no (used for booleans on even lines)
+    if (value === 'yes' || value === 'no') return true;
+
+    return false;
+  }
+
   public jsonToRoml(data: Record<string, unknown>): string {
-    // Analyze document features (placeholder for Phase 1)
     const documentFeatures = this.analyzeDocumentFeatures(data);
+
+    // Build header components
+    const headerLines = ['~ROML~'];
+
+    if (documentFeatures.primesDetected) {
+      headerLines.push(`# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
+    }
+
+    // Future META features would be added here:
+    // if (documentFeatures.hasLargeStrings) {
+    //   headerLines.push('~META~ LARGE_STRINGS_DETECTED');
+    // }
 
     const context: ConversionContext = {
       depth: 0,
       path: [],
-      lineNumber: 1,
+      lineNumber: headerLines.length, // Start after header lines
       documentFeatures,
     };
 
     const converted = this.convertObject(data, context);
-    return `~ROML~\n${converted.result}`;
+    return `${headerLines.join('\n')}\n${converted.result}`;
   }
 
   private convertValue(
@@ -110,6 +209,7 @@ export class RomlConverter {
           nextLineNumber: context.lineNumber + 1,
         };
       }
+
       return {
         result: `${indent}${this.selectSyntax(key, value, context, lineFeatures)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
@@ -143,6 +243,11 @@ export class RomlConverter {
 
     if (hasObjects) {
       let currentLineNumber = context.lineNumber + 1;
+
+      // Analyze if this array contains primes
+      const lineFeatures = this.analyzeLineFeatures(key, array, context);
+      const prefix = lineFeatures.containsPrime ? '!' : '';
+
       const newContext: ConversionContext = {
         ...context,
         depth: context.depth + 1,
@@ -166,13 +271,15 @@ export class RomlConverter {
       }
 
       return {
-        result: `${indent}${key}[\n${arrayItems.join('\n')}\n${indent}]`,
+        result: `${indent}${prefix}${key}[\n${arrayItems.join('\n')}\n${indent}]`,
         nextLineNumber: currentLineNumber + 1,
       };
     }
 
     // For primitive arrays, they take only one line
     const arrayStyle = this.selectArrayStyle(key, context);
+    const lineFeatures = this.analyzeLineFeatures(key, array, context);
+    const prefix = lineFeatures.containsPrime ? '!' : '';
 
     switch (arrayStyle) {
       case 'PIPES':
@@ -181,11 +288,15 @@ export class RomlConverter {
             if (item === null) return '__NULL__';
             if (item === '') return '__EMPTY__';
             if (item === undefined) return '__UNDEFINED__';
+            // Quote ambiguous strings in arrays
+            if (typeof item === 'string' && this.isAmbiguousString(item)) {
+              return `"${item}"`;
+            }
             return String(item);
           })
           .join('||');
         return {
-          result: `${indent}${key}||${pipeItems}||`,
+          result: `${indent}${prefix}${key}||${pipeItems}||`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -195,17 +306,32 @@ export class RomlConverter {
             if (item === null) return '<__NULL__>';
             if (item === '') return '<__EMPTY__>';
             if (item === undefined) return '<__UNDEFINED__>';
+            // Quote ambiguous strings in arrays
+            if (typeof item === 'string' && this.isAmbiguousString(item)) {
+              return `<"${item}">`;
+            }
             return `<${item}>`;
           })
           .join('');
         return {
-          result: `${indent}${key}${bracketItems}`,
+          result: `${indent}${prefix}${key}${bracketItems}`,
           nextLineNumber: context.lineNumber + 1,
         };
 
       case 'JSON_STYLE':
+        const jsonItems = array.map((item) => {
+          if (item === null) return 'null';
+          if (item === '') return '""';
+          if (item === undefined) return 'undefined';
+          if (typeof item === 'string') {
+            // Use JSON.stringify to properly escape strings and quote only when needed
+            return JSON.stringify(item);
+          }
+          // Numbers, booleans, etc. are not quoted
+          return String(item);
+        });
         return {
-          result: `${indent}${key}[${array.map((item) => `"${item}"`).join(',')}]`,
+          result: `${indent}${prefix}${key}[${jsonItems.join(',')}]`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -214,16 +340,20 @@ export class RomlConverter {
           if (item === null) return '__NULL__';
           if (item === '') return '__EMPTY__';
           if (item === undefined) return '__UNDEFINED__';
+          // Quote ambiguous strings in arrays
+          if (typeof item === 'string' && this.isAmbiguousString(item)) {
+            return `"${item}"`;
+          }
           return String(item);
         });
         return {
-          result: `${indent}${key}:${colonItems.join(':')}`,
+          result: `${indent}${prefix}${key}:${colonItems.join(':')}`,
           nextLineNumber: context.lineNumber + 1,
         };
 
       default:
         return {
-          result: `${indent}${key}||${array.join('||')}||`,
+          result: `${indent}${prefix}${key}||${array.join('||')}||`,
           nextLineNumber: context.lineNumber + 1,
         };
     }
@@ -239,6 +369,10 @@ export class RomlConverter {
       const obj = objOrContext;
       const indent = '  '.repeat(context.depth);
       let currentLineNumber = context.lineNumber + 1;
+
+      // For objects, don't add prefix to the object key itself
+      // The prefix will be added to individual keys with prime values inside
+      const prefix = '';
 
       const newContext: ConversionContext = {
         ...context,
@@ -256,7 +390,7 @@ export class RomlConverter {
       }
 
       return {
-        result: `${indent}${key}{\n${entries.join('\n')}\n${indent}}`,
+        result: `${indent}${prefix}${key}{\n${entries.join('\n')}\n${indent}}`,
         nextLineNumber: currentLineNumber + 1,
       };
     } else {
@@ -300,8 +434,10 @@ export class RomlConverter {
     if (valueType === 'boolean') {
       if (isEvenLine) {
         // Even lines: use equals notation with yes/no
-        return (key: string, value: unknown, features: LineFeatures) =>
-          `${key}=${value === true ? 'yes' : 'no'}`;
+        return (key: string, value: unknown, features: LineFeatures) => {
+          const prefix = features.containsPrime ? '!' : '';
+          return `${prefix}${key}=${value === true ? 'yes' : 'no'}`;
+        };
       } else {
         // Odd lines: use bracket notation
         return SYNTAX_STYLES.BRACKETS;
@@ -406,11 +542,12 @@ export class RomlConverter {
   }
 
   /**
-   * Analyze document-level features (Phase 1: placeholder implementation)
+   * Analyze document-level features
    */
   private analyzeDocumentFeatures(data: Record<string, unknown>): DocumentFeatures {
-    // Phase 1: Return empty features, actual detection logic will be added in Phase 2
-    return EMPTY_DOCUMENT_FEATURES;
+    return {
+      primesDetected: objectContainsPrimes(data),
+    };
   }
 
   /**
@@ -433,15 +570,17 @@ export class RomlConverter {
     const isNestedObject = typeof value === 'object' && value !== null && !Array.isArray(value);
     const hasLargeArray = Array.isArray(value) && value.length > 5;
     const nestingDepth = context?.depth || 0;
+    const needsQuotes = typeof value === 'string' && this.isAmbiguousString(value);
 
     return {
-      containsPrime: false, // Will be implemented in Phase 2
+      containsPrime: containsPrime(value),
       hasLargeArray,
       isNestedObject,
       keyStartsWithVowel,
       hasLongString,
       isSpecialValue,
       nestingDepth,
+      needsQuotes,
     };
   }
 }

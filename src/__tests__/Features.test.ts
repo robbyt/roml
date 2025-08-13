@@ -1,5 +1,5 @@
 import { RomlConverter } from '../RomlConverter';
-import { EMPTY_DOCUMENT_FEATURES, EMPTY_LINE_FEATURES } from '../types';
+import { EMPTY_DOCUMENT_FEATURES, EMPTY_LINE_FEATURES, MetaTags } from '../types';
 
 describe('ROML Features Infrastructure', () => {
   let converter: RomlConverter;
@@ -19,13 +19,13 @@ describe('ROML Features Infrastructure', () => {
       // Convert to ROML and verify output format unchanged
       const romlOutput = converter.jsonToRoml(testData);
 
-      // Should start with standard header (no META tags in Phase 1)
+      // Should start with standard header
       expect(romlOutput).toMatch(/^~ROML~/);
 
-      // Should not contain any META tags in Phase 1
+      // Phase 2: No primes in this data, so no META tag expected
       expect(romlOutput).not.toContain('~META~');
 
-      // Should contain expected content
+      // Should contain expected content (no prime prefixes for non-prime data)
       expect(romlOutput).toContain('name="Robert"'); // Personal semantic category
       expect(romlOutput).toContain('age'); // Should be present
       expect(romlOutput).toContain('active'); // Should be present
@@ -58,9 +58,9 @@ describe('ROML Features Infrastructure', () => {
       expect(romlOutput).toContain('settings{');
       expect(romlOutput).toContain('metadata{');
 
-      // Should not have any feature-specific modifications in Phase 1
+      // Phase 2: No primes in this data, so no META tag expected
       expect(romlOutput).not.toContain('~META~');
-      expect(romlOutput).not.toContain('!'); // No prime prefixes
+      expect(romlOutput).not.toContain('!'); // No prime prefixes expected
     });
   });
 
@@ -192,9 +192,10 @@ describe('ROML Features Infrastructure', () => {
         expect(romlOutput).not.toContain('undefined');
         expect(romlOutput).not.toContain('null');
 
-        // Should not contain Phase 2 features
-        expect(romlOutput).not.toContain('~META~');
-        expect(romlOutput).not.toContain('SIEVE_OF_ERATOSTHENES');
+        // Phase 2: Should contain META tags when primes are detected
+        if (romlOutput.includes('~META~')) {
+          expect(romlOutput).toContain(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
+        }
       });
     });
   });

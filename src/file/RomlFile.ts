@@ -84,6 +84,9 @@ export class RomlFile {
 
   public toJSON(): any {
     const parseResult = this.parse();
+    if (parseResult.errors.length > 0) {
+      throw new Error(`Parse validation failed: ${parseResult.errors.join('; ')}`);
+    }
     return parseResult.data;
   }
 

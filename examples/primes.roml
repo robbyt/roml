@@ -1,0 +1,70 @@
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+#
+# Prime Number Handling Example
+#
+# This example demonstrates how ROML handles prime numbers with the ! prefix system.
+#
+# Key Features:
+# 1. META Tag: ~META~ SIEVE_OF_ERATOSTHENES_INVOKED is required when primes are present
+# 2. Prime Prefixes: Keys with prime number values get the ! prefix
+# 3. Type Preservation: String "7" is quoted to distinguish from number 7  
+# 4. Array Handling: Arrays containing primes get the prefix on the array key
+#
+# Important Notes:
+# - Only NUMERIC values are checked for primality (not strings like "7")
+# - The ! prefix appears on KEYS whose VALUES are prime numbers
+# - Arrays containing primes get the ! prefix on the array KEY, not individual elements
+# - META tag is mandatory when any primes are present
+# - Negative numbers, zero, and one are not considered prime
+# - The Double Quote Rule ensures strings like "7" remain strings after round-trip conversion
+#
+# Type Preservation Examples:
+# - value="7" → String "7" (preserved as string)
+# - value=7 → Number 7 (parsed as number)
+# - active="true" → String "true" (preserved as string)
+# - active=true → Boolean true (parsed as boolean)
+
+# Basic prime numbers (! prefix indicates prime values)
+# 7 is prime → gets ! prefix
+!count:7
+# 13 is prime → gets ! prefix (ampersand style)
+&!value&13
+# 4 is not prime → no prefix
+composite:4
+
+# Type preservation examples
+# String "7" → quoted to preserve string type
+//message//"7"
+# String "13" → quoted to preserve string type  
+primeString="13"
+
+# Edge cases
+# -7 is negative → no prefix (negatives not prime)
+&negative&-7
+# 0 is not prime → no prefix
+zero:0
+# 1 is not prime → no prefix
+&one&1
+# 2 is prime → gets ! prefix
+!two:2
+# 97 is prime → gets ! prefix
+&!large&97
+
+# Nested objects
+nested{
+  # 17 is prime → gets ! prefix
+  &!prime&17
+  # 15 is composite → no prefix
+  notPrime:15
+  # String "prime" → quoted
+  //text//"prime"
+}
+
+# Arrays with primes (prefix goes on array key, not elements)
+# Array contains primes → array key gets ! prefix
+!primes||2||3||5||7||
+# Mixed array with primes → array key gets ! prefix
+!mixed:2:4:7:9
+# String array → no prefix, elements quoted
+strings["2","3","5"]
