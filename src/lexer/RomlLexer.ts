@@ -74,6 +74,21 @@ export class RomlLexer {
         continue;
       }
 
+      // Handle comment lines (including META tags)
+      if (trimmedLine.startsWith('#')) {
+        // Store comment lines in header token if they contain META
+        if (
+          trimmedLine.includes('~META~') &&
+          this.tokens.length > 0 &&
+          this.tokens[0].type === 'HEADER'
+        ) {
+          this.tokens[0].value = this.tokens[0].value + '\n' + trimmedLine;
+        }
+        // Skip all comment lines from tokenization
+        i++;
+        continue;
+      }
+
       const depth = this.calculateDepth(line);
       const lineNumber = startLineNum + i;
       const startOffset = this.getLineStartOffset(lineNumber);
@@ -180,73 +195,136 @@ export class RomlLexer {
     // Parse quoted style: name="value"
     const quotedMatch = line.match(/^(.+?)="(.+)"$/);
     if (quotedMatch) {
-      const value = this.parseSpecialValue(quotedMatch[2]);
+      // Preserve quoted values as strings - don't convert types
+      const value = quotedMatch[2];
       return [quotedMatch[1], value, 'QUOTED'];
     }
 
-    // Parse even-line equals style: key=value or key=yes/no
+    // Parse even-line equals style: key=value or key=yes/no or key="value"
     const equalsMatch = line.match(/^(.+?)=(.+)$/);
     if (equalsMatch && !quotedMatch) {
       const value = equalsMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = value.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [equalsMatch[1], quotedValueMatch[1], 'EQUALS'];
+      }
       if (value === 'yes') return [equalsMatch[1], true, 'EQUALS'];
       if (value === 'no') return [equalsMatch[1], false, 'EQUALS'];
       return [equalsMatch[1], this.parseSpecialValue(value), 'EQUALS'];
     }
 
-    // Parse even-line colon style: key:value
+    // Parse even-line colon style: key:value or key:"value"
     const colonMatch = line.match(/^(.+?):(.+)$/);
     if (colonMatch && !colonMatch[2].includes(':')) {
-      const value = this.parseSpecialValue(colonMatch[2]);
+      const rawValue = colonMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [colonMatch[1], quotedValueMatch[1], 'COLON'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       const numValue = parseFloat(String(value));
       return [colonMatch[1], isNaN(numValue) ? value : numValue, 'COLON'];
     }
 
-    // Parse even-line tilde style: key~value
+    // Parse even-line tilde style: key~value or key~"value"
     const tildeMatch = line.match(/^(.+?)~(.+)$/);
     if (tildeMatch) {
-      const value = this.parseSpecialValue(tildeMatch[2]);
+      const rawValue = tildeMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [tildeMatch[1], quotedValueMatch[1], 'TILDE'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [tildeMatch[1], value, 'TILDE'];
     }
 
-    // Parse even-line hash style: key#value
+    // Parse even-line hash style: key#value or key#"value"
     const hashMatch = line.match(/^(.+?)#(.+)$/);
     if (hashMatch) {
-      const value = this.parseSpecialValue(hashMatch[2]);
+      const rawValue = hashMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [hashMatch[1], quotedValueMatch[1], 'HASH'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [hashMatch[1], value, 'HASH'];
     }
 
-    // Parse even-line percent style: key%value
+    // Parse even-line percent style: key%value or key%"value"
     const percentMatch = line.match(/^(.+?)%(.+)$/);
     if (percentMatch) {
-      const value = this.parseSpecialValue(percentMatch[2]);
+      const rawValue = percentMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [percentMatch[1], quotedValueMatch[1], 'PERCENT'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [percentMatch[1], value, 'PERCENT'];
     }
 
-    // Parse even-line dollar style: key$value
+    // Parse even-line dollar style: key$value or key$"value"
     const dollarMatch = line.match(/^(.+?)\$(.+)$/);
     if (dollarMatch) {
-      const value = this.parseSpecialValue(dollarMatch[2]);
+      const rawValue = dollarMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [dollarMatch[1], quotedValueMatch[1], 'DOLLAR'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [dollarMatch[1], value, 'DOLLAR'];
     }
 
-    // Parse even-line caret style: key^value
+    // Parse even-line caret style: key^value or key^"value"
     const caretMatch = line.match(/^(.+?)\^(.+)$/);
     if (caretMatch) {
-      const value = this.parseSpecialValue(caretMatch[2]);
+      const rawValue = caretMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [caretMatch[1], quotedValueMatch[1], 'CARET'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [caretMatch[1], value, 'CARET'];
     }
 
-    // Parse even-line plus style: key+value
+    // Parse even-line plus style: key+value or key+"value"
     const plusMatch = line.match(/^(.+?)\+(.+)$/);
     if (plusMatch) {
-      const value = this.parseSpecialValue(plusMatch[2]);
+      const rawValue = plusMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [plusMatch[1], quotedValueMatch[1], 'PLUS'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       return [plusMatch[1], value, 'PLUS'];
     }
 
-    // Parse ampersand style: &key&value
+    // Parse ampersand style: &key&value or &key&"value"
     const ampersandMatch = line.match(/^&(.+?)&(.+)$/);
     if (ampersandMatch) {
-      const value = this.parseSpecialValue(ampersandMatch[2]);
+      const rawValue = ampersandMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [ampersandMatch[1], quotedValueMatch[1], 'AMPERSAND'];
+      }
+      const value = this.parseSpecialValue(rawValue);
       const numValue = parseFloat(String(value));
       return [ampersandMatch[1], isNaN(numValue) ? value : numValue, 'AMPERSAND'];
     }
@@ -255,9 +333,16 @@ export class RomlLexer {
     const multiBracketMatch = line.match(/^(.+?)(<.+>)+$/);
     if (multiBracketMatch && line.includes('><')) {
       const key = multiBracketMatch[1];
-      const items = [...line.matchAll(/<([^>]+)>/g)].map((match) =>
-        this.parseSpecialValue(match[1])
-      );
+      const items = [...line.matchAll(/<([^>]+)>/g)].map((match) => {
+        const itemValue = match[1];
+        // Check if item is quoted
+        const quotedMatch = itemValue.match(/^"(.+)"$/);
+        if (quotedMatch) {
+          // Preserve quoted values as strings
+          return quotedMatch[1];
+        }
+        return this.parseSpecialValue(itemValue);
+      });
       return [key, items, 'BRACKETS'];
     }
 
@@ -279,45 +364,138 @@ export class RomlLexer {
         const items = value
           .split('||')
           .filter((item) => item.trim())
-          .map((item) => this.parseSpecialValue(item));
+          .map((item) => {
+            // Check if item is quoted
+            const quotedMatch = item.match(/^"(.+)"$/);
+            if (quotedMatch) {
+              // Preserve quoted values as strings
+              return quotedMatch[1];
+            }
+            return this.parseSpecialValue(item);
+          });
         return [key, items, 'PIPES'];
       } else {
+        // Check if single value is quoted
+        const quotedMatch = value.match(/^"(.+)"$/);
+        if (quotedMatch) {
+          return [key, quotedMatch[1], 'PIPES'];
+        }
         return [key, this.parseSpecialValue(value), 'PIPES'];
       }
+    }
+
+    // Parse JSON-style arrays: key["item1",7,"true",true]
+    const jsonArrayMatch = line.match(/^(.+?)\[(.+)\]$/);
+    if (jsonArrayMatch && jsonArrayMatch[2].includes(',')) {
+      const key = jsonArrayMatch[1];
+      const arrayContent = jsonArrayMatch[2];
+
+      // Parse JSON-style array items
+      const items: unknown[] = [];
+      let current = '';
+      let inQuotes = false;
+      let depth = 0;
+
+      for (let i = 0; i < arrayContent.length; i++) {
+        const char = arrayContent[i];
+
+        if (char === '"' && (i === 0 || arrayContent[i - 1] !== '\\')) {
+          inQuotes = !inQuotes;
+          current += char;
+        } else if (!inQuotes && char === '[') {
+          depth++;
+          current += char;
+        } else if (!inQuotes && char === ']') {
+          depth--;
+          current += char;
+        } else if (!inQuotes && char === ',' && depth === 0) {
+          // End of item
+          const trimmed = current.trim();
+          if (trimmed) {
+            items.push(this.parseJsonValue(trimmed));
+          }
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+
+      // Add the last item
+      const trimmed = current.trim();
+      if (trimmed) {
+        items.push(this.parseJsonValue(trimmed));
+      }
+
+      return [key, items, 'JSON_STYLE'];
     }
 
     // Parse colon-delimited arrays: key:item1:item2:item3
     const colonArrayMatch = line.match(/^(.+?):(.+)$/);
     if (colonArrayMatch && colonArrayMatch[2].includes(':')) {
       const key = colonArrayMatch[1];
-      const items = colonArrayMatch[2].split(':').map((item) => this.parseSpecialValue(item));
+      const items = colonArrayMatch[2].split(':').map((item) => {
+        // Check if item is quoted
+        const quotedMatch = item.match(/^"(.+)"$/);
+        if (quotedMatch) {
+          // Preserve quoted values as strings
+          return quotedMatch[1];
+        }
+        return this.parseSpecialValue(item);
+      });
       return [key, items, 'COLON_DELIM'];
     }
 
-    // Parse double colon style: ::key::value::
+    // Parse double colon style: ::key::value:: or ::key::"value"::
     const doubleColonMatch = line.match(/^::(.+?)::(.+)::$/);
     if (doubleColonMatch) {
-      return [doubleColonMatch[1], this.parseSpecialValue(doubleColonMatch[2]), 'DOUBLE_COLON'];
+      const rawValue = doubleColonMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [doubleColonMatch[1], quotedValueMatch[1], 'DOUBLE_COLON'];
+      }
+      return [doubleColonMatch[1], this.parseSpecialValue(rawValue), 'DOUBLE_COLON'];
     }
 
-    // Parse fake comment style: //key//value
+    // Parse fake comment style: //key//value or //key//"value"
     const commentMatch = line.match(/^\/\/(.+?)\/\/(.*)$/);
     if (commentMatch) {
-      const value = commentMatch[2];
-      const parsedValue = this.parseSpecialValue(value);
+      const rawValue = commentMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [commentMatch[1], quotedValueMatch[1], 'FAKE_COMMENT'];
+      }
+      const parsedValue = this.parseSpecialValue(rawValue);
       return [commentMatch[1], parsedValue, 'FAKE_COMMENT'];
     }
 
-    // Parse at sandwich style: @key@value@
+    // Parse at sandwich style: @key@value@ or @key@"value"@
     const atMatch = line.match(/^@(.+?)@(.+)@$/);
     if (atMatch) {
-      return [atMatch[1], this.parseSpecialValue(atMatch[2]), 'AT_SANDWICH'];
+      const rawValue = atMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [atMatch[1], quotedValueMatch[1], 'AT_SANDWICH'];
+      }
+      return [atMatch[1], this.parseSpecialValue(rawValue), 'AT_SANDWICH'];
     }
 
-    // Parse underscore style: _key_value_
+    // Parse underscore style: _key_value_ or _key_"value"_
     const underscoreMatch = line.match(/^_(.+?)_(.+)_$/);
     if (underscoreMatch) {
-      return [underscoreMatch[1], this.parseSpecialValue(underscoreMatch[2]), 'UNDERSCORE'];
+      const rawValue = underscoreMatch[2];
+      // Check if value is quoted
+      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
+      if (quotedValueMatch) {
+        // Preserve quoted values as strings
+        return [underscoreMatch[1], quotedValueMatch[1], 'UNDERSCORE'];
+      }
+      return [underscoreMatch[1], this.parseSpecialValue(rawValue), 'UNDERSCORE'];
     }
 
     return null;
@@ -336,6 +514,35 @@ export class RomlLexer {
     }
 
     return value;
+  }
+
+  private parseJsonValue(value: string): unknown {
+    const trimmed = value.trim();
+
+    // Handle quoted strings - preserve as strings
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      return trimmed.slice(1, -1); // Remove quotes and return string
+    }
+
+    // Handle special JSON values
+    if (trimmed === 'null') return null;
+    if (trimmed === 'true') return true;
+    if (trimmed === 'false') return false;
+    if (trimmed === 'undefined') return undefined;
+
+    // Handle numbers
+    const numValue = parseFloat(trimmed);
+    if (!isNaN(numValue) && isFinite(numValue) && String(numValue) === trimmed) {
+      return numValue;
+    }
+
+    // Handle special ROML values
+    if (trimmed === '__NULL__') return null;
+    if (trimmed === '__EMPTY__') return '';
+    if (trimmed === '__UNDEFINED__') return undefined;
+
+    // Default to string for unrecognized values
+    return trimmed;
   }
 
   private calculateDepth(line: string): number {

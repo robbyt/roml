@@ -12,10 +12,6 @@ Each ROML document begins with the `~ROML~` header, followed by data encoded usi
 
 ROML alternates behavior for even or odd lines in the document. Odd-numbered lines use one set of eight syntax styles, while even-numbered lines use a different set of eight styles. Boolean values are `<true>` on odd lines and `=yes` on even lines.
 
-Array representations vary by content type. Primitive arrays use pipe-delimited formats (`||item1||item2||`) or bracket enclosures (`<item1><item2>`), while object arrays use numbered containers (`[0]{...}`, `[1]{...}`). Object nesting uses standard brace notation.
-
-Special values are encoded explicitly: null values become `__NULL__`, empty strings become `__EMPTY__`, and whitespace is preserved exactly.
-
 ROML's syntax selection works deterministically based on key names, value types, line positions, semantic categorization, and nesting depth. Identical JSON input produces identical ROML output.
 
 **No formal specification exists for ROML.** The lack of a complete specification is inspired by other serialization formats, the format is defined only through this implementation and the limited examples.
@@ -115,6 +111,18 @@ ROML uses different syntax styles for odd and even lines:
 - `key$value` - Dollar style for special values
 
 The same JSON structure always produces identical ROML output. The alternating pattern creates visual rhythm while maintaining deterministic conversion.
+
+### Array and Special Value Handling
+
+**Array Representations:**
+- **Primitive arrays**: Use pipe-delimited format (`||item1||item2||`) or bracket enclosures (`<item1><item2>`)
+- **Object arrays**: Use numbered containers (`[0]{...}`, `[1]{...}`)
+- **Object nesting**: Uses standard brace notation (`{...}`)
+
+**Special Values:**
+- **Null values**: `__NULL__`
+- **Empty strings**: `__EMPTY__`
+- **Whitespace**: Preserved exactly as-is
 
 ## Development
 

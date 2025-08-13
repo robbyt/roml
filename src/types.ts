@@ -26,6 +26,7 @@ export interface LineFeatures {
   readonly hasLongString: boolean;
   readonly isSpecialValue: boolean;
   readonly nestingDepth: number;
+  readonly needsQuotes: boolean;
 }
 
 /**
@@ -46,4 +47,5 @@ export const EMPTY_LINE_FEATURES: LineFeatures = {
   hasLongString: false,
   isSpecialValue: false,
   nestingDepth: 0,
+  needsQuotes: false,
 } as const;

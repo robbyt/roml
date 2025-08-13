@@ -71,7 +71,14 @@ export class CliCommands {
     } catch (error) {
       const errorMsg = 'Error: Invalid ROML input';
       this.errorWriter(errorMsg);
-      this.errorWriter(error instanceof Error ? error.message : String(error));
+
+      if (error instanceof Error && error.message.includes('Parse validation failed:')) {
+        // Extract parser errors and format them
+        const parserErrors = error.message.replace('Parse validation failed: ', '');
+        this.errorWriter(`Parse errors: ${parserErrors}`);
+      } else {
+        this.errorWriter(error instanceof Error ? error.message : String(error));
+      }
       return { output: '', exitCode: 1 };
     }
   }

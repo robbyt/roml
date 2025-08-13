@@ -247,4 +247,189 @@ Note: Output depends on line counting and implementation details.
 
 6. **Indentation is visual only** - Indentation doesn't affect parsing or line counting.
 
+## Prime Number Detection and Prefixes
+
+ROML includes an optional prime number detection system that adds metadata and special prefixes to enhance the format's deterministic chaos.
+
+### Prime Detection Rules
+
+**What Gets Detected:**
+- Only **numeric values** (JavaScript `number` type) are checked for primality
+- String values like `"7"` or `"prime"` are **NOT** considered prime numbers
+- Negative numbers, zero, and one are **NOT** considered prime
+- Both integer and floating-point numbers are checked (though only integers can be prime)
+
+**Prime Prefix System:**
+- Keys whose **values** are prime numbers get a `!` prefix
+- Example: `{"count": 7}` becomes `!count:7` in ROML
+- The prefix appears on the **key**, not the value
+- Arrays containing prime numbers get the prefix on the array key: `!primes||2||3||5||`
+
+### META Tag Requirement
+
+When any prime numbers are detected in the data:
+
+1. **META tag is mandatory**: `# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED`
+2. **Tag placement**: Must appear after the `~ROML~` header, typically on line 2
+3. **Comment syntax**: Uses `#` to avoid namespace conflicts with data keys named "~META~"
+
+### Validation Rules
+
+**Bidirectional Validation:**
+- Documents with prime numbers **MUST** include the META tag
+- Documents with the META tag **MUST** contain prime numbers
+- Violations of either rule result in parse errors
+
+**Error Scenarios:**
+```roml
+# ERROR: Prime numbers without META tag
+!count:7
+value:13
+```
+
+```roml 
+# ERROR: META tag without prime numbers
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+count:4
+value:6
+```
+
+**Validation Messages:**
+- Missing META: "Document contains prime-prefixed keys but is missing the required ~META~ SIEVE_OF_ERATOSTHENES_INVOKED tag"
+- Unused META: "Document declares ~META~ SIEVE_OF_ERATOSTHENES_INVOKED but contains no prime-prefixed keys"
+- Invalid prefix: "Invalid prime prefix at line X: Key '!name' is marked as prime but value 8 is not a prime number"
+
+### Prime Detection Examples
+
+**Valid Prime Usage:**
+```roml
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+!count:7          # 7 is prime
+!value:13         # 13 is prime  
+composite:4       # 4 is not prime
+message="seven"   # Non-numeric string (preserved as string)
+```
+
+**String vs Number Distinction:**
+```json
+{
+  "primeNumber": 7,     // Gets ! prefix (numeric 7 is prime)
+  "sevenText": "seven", // No prefix (non-numeric string)
+  "notPrime": 8         // No prefix (8 is not prime)
+}
+```
+
+
+**Array Handling:**
+```roml
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+!primes||2||3||5||7||    # Array key gets prefix (contains primes)
+mixed:2:4:7:9           # Mixed array (contains some primes)
+strings["2","3","5"]    # String array (no numeric primes)
+```
+
+**Nested Objects:**
+```roml
+~ROML~
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
+data{
+  !prime:17       # Prime in nested object
+  composite:15    # Not prime
+  nested{
+    !anotherPrime:23  # Deeply nested prime
+  }
+}
+```
+
+### Round-Trip Conversion
+
+**Perfect Preservation:**
+- Prime prefixes are stripped during parsing: `!count:7` → `{"count": 7}`
+- Original data is perfectly preserved through JSON→ROML→JSON conversion
+- META tag is automatically generated when converting from JSON containing primes
+- Parser validates prefix correctness and META tag consistency
+
+**Implementation Notes:**
+- Prime detection uses Sieve of Eratosthenes for numbers ≤ 10,000
+- Larger numbers use trial division for efficiency
+- Prime detection occurs during JSON→ROML conversion
+- Validation occurs during ROML→JSON parsing
+
+See `examples/primes.roml` for a comprehensive example showing all prime number handling scenarios.
+
+## Type Preservation: The Double Quote Rule
+
+ROML uses a simple and elegant rule to preserve type information during round-trip conversion:
+
+### The Rule
+**Quoted values are always preserved as strings.** When a value is enclosed in double quotes, it will always be parsed as a string, never converted to another type.
+
+### Examples
+
+**String vs Number:**
+```roml
+count="7"      # String "7" (quotes preserve string type)
+count=7        # Number 7 (no quotes, parsed as number)
+price="19.99"  # String "19.99"
+price=19.99    # Number 19.99
+```
+
+**String vs Boolean:**
+```roml
+active="true"  # String "true" (quotes preserve string type)
+active=true    # Boolean true (no quotes, parsed as boolean)
+active=yes     # Boolean true (even-line syntax)
+active="yes"   # String "yes" (quotes preserve string)
+```
+
+**String vs Null:**
+```roml
+value="null"   # String "null" (quotes preserve string type)
+value=__NULL__ # Actual null value
+```
+
+### How It Works
+
+1. **During Encoding (JSON→ROML):**
+   - Strings that look like numbers, booleans, or null are automatically quoted
+   - Example: `{"count": "7"}` → `count="7"`
+   - Regular strings may or may not be quoted depending on syntax style
+
+2. **During Parsing (ROML→JSON):**
+   - If a value has quotes, it's preserved as a string
+   - If no quotes, the parser attempts type inference
+
+3. **Arrays:**
+   - Same rule applies to array elements
+   - `items||"7"||7||` → `["7", 7]` (string "7" and number 7)
+   - `values<"true"><false>` → `["true", false]` (string and boolean)
+
+### Perfect Round-Trip Guarantee
+
+This rule ensures that:
+```json
+// Original JSON
+{
+  "stringId": "123",
+  "numberId": 123,
+  "isActive": "false",
+  "isEnabled": false
+}
+
+// Converts to ROML and back to identical JSON
+{
+  "stringId": "123",    // Preserved as string
+  "numberId": 123,      // Preserved as number
+  "isActive": "false",  // Preserved as string
+  "isEnabled": false    // Preserved as boolean
+}
+```
+
+### Implementation Note
+
+ROML automatically detects "ambiguous strings" (strings that look like other types) and adds quotes during encoding to ensure they remain strings after parsing. This happens transparently - you don't need to manually add quotes.
+
 The authoritative definition of ROML is its implementation, not this documentation.
