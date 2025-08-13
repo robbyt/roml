@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { RomlFile } from './file/RomlFile';
+import { RomlFile } from './file/RomlFile.js';
 import * as process from 'process';
 
 function showHelp() {
@@ -85,7 +85,8 @@ async function main() {
   }
 }
 
-if (require.main === module) {
+// ES module equivalent of require.main === module
+if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((error) => {
     console.error('Unexpected error:', error);
     process.exit(1);

@@ -1,4 +1,4 @@
-import { RomlToken } from '../lexer/RomlLexer';
+import { RomlToken } from '../lexer/RomlLexer.js';
 
 export interface RomlMetadata {
   checksum: string;

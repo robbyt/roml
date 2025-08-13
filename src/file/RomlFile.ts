@@ -1,6 +1,6 @@
-import { RomlLexer } from '../lexer/RomlLexer';
-import { RomlParser, RomlMetadata, RomlParseResult } from '../parser/RomlParser';
-import { RomlConverter } from '../RomlConverter';
+import { RomlLexer } from '../lexer/RomlLexer.js';
+import { RomlParser, RomlMetadata, RomlParseResult } from '../parser/RomlParser.js';
+import { RomlConverter } from '../RomlConverter.js';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
