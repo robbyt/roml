@@ -1,24 +1,31 @@
+import {
+  DocumentFeatures,
+  LineFeatures,
+  EMPTY_DOCUMENT_FEATURES,
+  EMPTY_LINE_FEATURES,
+} from './types.js';
+
 const SYNTAX_STYLES = {
-  QUOTED: (key: string, value: unknown) => `${key}="${value}"`,
-  AMPERSAND: (key: string, value: unknown) => `&${key}&${value}`,
-  BRACKETS: (key: string, value: unknown) => `${key}<${value}>`,
-  PIPES: (key: string, value: unknown) => `||${key}||${value}||`,
-  DOUBLE_COLON: (key: string, value: unknown) => `::${key}::${value}::`,
-  FAKE_COMMENT: (key: string, value: unknown) => `//${key}//${value}`,
-  AT_SANDWICH: (key: string, value: unknown) => `@${key}@${value}@`,
-  UNDERSCORE: (key: string, value: unknown) => `_${key}_${value}_`,
+  QUOTED: (key: string, value: unknown, features: LineFeatures) => `${key}="${value}"`,
+  AMPERSAND: (key: string, value: unknown, features: LineFeatures) => `&${key}&${value}`,
+  BRACKETS: (key: string, value: unknown, features: LineFeatures) => `${key}<${value}>`,
+  PIPES: (key: string, value: unknown, features: LineFeatures) => `||${key}||${value}||`,
+  DOUBLE_COLON: (key: string, value: unknown, features: LineFeatures) => `::${key}::${value}::`,
+  FAKE_COMMENT: (key: string, value: unknown, features: LineFeatures) => `//${key}//${value}`,
+  AT_SANDWICH: (key: string, value: unknown, features: LineFeatures) => `@${key}@${value}@`,
+  UNDERSCORE: (key: string, value: unknown, features: LineFeatures) => `_${key}_${value}_`,
 } as const;
 
 // Alternative syntax styles for even lines
 const EVEN_LINE_STYLES = {
-  EQUALS: (key: string, value: unknown) => `${key}=${value}`,
-  COLON: (key: string, value: unknown) => `${key}:${value}`,
-  TILDE: (key: string, value: unknown) => `${key}~${value}`,
-  HASH: (key: string, value: unknown) => `${key}#${value}`,
-  PERCENT: (key: string, value: unknown) => `${key}%${value}`,
-  DOLLAR: (key: string, value: unknown) => `${key}$${value}`,
-  CARET: (key: string, value: unknown) => `${key}^${value}`,
-  PLUS: (key: string, value: unknown) => `${key}+${value}`,
+  EQUALS: (key: string, value: unknown, features: LineFeatures) => `${key}=${value}`,
+  COLON: (key: string, value: unknown, features: LineFeatures) => `${key}:${value}`,
+  TILDE: (key: string, value: unknown, features: LineFeatures) => `${key}~${value}`,
+  HASH: (key: string, value: unknown, features: LineFeatures) => `${key}#${value}`,
+  PERCENT: (key: string, value: unknown, features: LineFeatures) => `${key}%${value}`,
+  DOLLAR: (key: string, value: unknown, features: LineFeatures) => `${key}$${value}`,
+  CARET: (key: string, value: unknown, features: LineFeatures) => `${key}^${value}`,
+  PLUS: (key: string, value: unknown, features: LineFeatures) => `${key}+${value}`,
 } as const;
 
 type SyntaxStyleName = keyof typeof SYNTAX_STYLES;
@@ -32,6 +39,7 @@ interface ConversionContext {
   readonly parentKey?: string;
   readonly path: readonly string[];
   readonly lineNumber: number;
+  readonly documentFeatures: DocumentFeatures;
 }
 
 const SEMANTIC_CATEGORIES = {
@@ -45,10 +53,14 @@ const SEMANTIC_CATEGORIES = {
 
 export class RomlConverter {
   public jsonToRoml(data: Record<string, unknown>): string {
+    // Analyze document features (placeholder for Phase 1)
+    const documentFeatures = this.analyzeDocumentFeatures(data);
+
     const context: ConversionContext = {
       depth: 0,
       path: [],
       lineNumber: 1,
+      documentFeatures,
     };
 
     const converted = this.convertObject(data, context);
@@ -61,31 +73,32 @@ export class RomlConverter {
     context: ConversionContext
   ): { result: string; nextLineNumber: number } {
     const indent = '  '.repeat(context.depth);
+    const lineFeatures = this.analyzeLineFeatures(key, value);
 
     if (value === null) {
       return {
-        result: `${indent}${this.selectSyntax(key, '__NULL__', context)(key, '__NULL__')}`,
+        result: `${indent}${this.selectSyntax(key, '__NULL__', context)(key, '__NULL__', lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (value === undefined) {
       return {
-        result: `${indent}${this.selectSyntax(key, '__UNDEFINED__', context)(key, '__UNDEFINED__')}`,
+        result: `${indent}${this.selectSyntax(key, '__UNDEFINED__', context)(key, '__UNDEFINED__', lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (typeof value === 'boolean') {
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value)}`,
+        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
 
     if (typeof value === 'number') {
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value)}`,
+        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
@@ -93,12 +106,12 @@ export class RomlConverter {
     if (typeof value === 'string') {
       if (value === '') {
         return {
-          result: `${indent}${this.selectSyntax(key, '__EMPTY__', context)(key, '__EMPTY__')}`,
+          result: `${indent}${this.selectSyntax(key, '__EMPTY__', context)(key, '__EMPTY__', lineFeatures)}`,
           nextLineNumber: context.lineNumber + 1,
         };
       }
       return {
-        result: `${indent}${this.selectSyntax(key, value, context)(key, value)}`,
+        result: `${indent}${this.selectSyntax(key, value, context)(key, value, lineFeatures)}`,
         nextLineNumber: context.lineNumber + 1,
       };
     }
@@ -266,7 +279,11 @@ export class RomlConverter {
     }
   }
 
-  private selectSyntax(key: string, value: unknown, context: ConversionContext): SyntaxFunction {
+  private selectSyntax(
+    key: string,
+    value: unknown,
+    context: ConversionContext
+  ): (key: string, value: unknown, features: LineFeatures) => string {
     const isEvenLine = context.lineNumber % 2 === 0;
     const keyHash = this.simpleHash(key);
     const valueType = typeof value;
@@ -283,7 +300,8 @@ export class RomlConverter {
     if (valueType === 'boolean') {
       if (isEvenLine) {
         // Even lines: use equals notation with yes/no
-        return (key: string, value: unknown) => `${key}=${value === true ? 'yes' : 'no'}`;
+        return (key: string, value: unknown, features: LineFeatures) =>
+          `${key}=${value === true ? 'yes' : 'no'}`;
       } else {
         // Odd lines: use bracket notation
         return SYNTAX_STYLES.BRACKETS;
@@ -387,5 +405,21 @@ export class RomlConverter {
       hash = hash & hash;
     }
     return Math.abs(hash);
+  }
+
+  /**
+   * Analyze document-level features (Phase 1: placeholder implementation)
+   */
+  private analyzeDocumentFeatures(data: Record<string, unknown>): DocumentFeatures {
+    // Phase 1: Return empty features, actual detection logic will be added in Phase 2
+    return EMPTY_DOCUMENT_FEATURES;
+  }
+
+  /**
+   * Analyze line-level features for a key-value pair (Phase 1: placeholder implementation)
+   */
+  private analyzeLineFeatures(key: string, value: unknown): LineFeatures {
+    // Phase 1: Return empty features, actual detection logic will be added in Phase 2
+    return EMPTY_LINE_FEATURES;
   }
 }
