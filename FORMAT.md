@@ -6,25 +6,37 @@ This document describes ROML (Robert's Opaque Mangling Language) encoding and de
 
 ROML documents begin with `~ROML~` on line 1. Subsequent content follows alternating line behavior rules.
 
-## Line Counting Rules
+## Line-Based Syntax Selection
 
-Lines are counted sequentially from 1. Each line counts, including:
-- The `~ROML~` header (line 1)
+ROML uses line numbers to determine which syntax style to use for each data element.
+
+Each line in the document gets a sequential number starting from 1:
+- Line 1: `~ROML~` header (odd)
+- Line 2+: META tags (if any, alternating even/odd)
+- Next line: First data element
+- Subsequent lines: Additional data elements
+- And so on...
+
+Data elements use syntax styles based on whether their line number is odd or even:
+- Odd line numbers (1, 3, 5...): Use "odd" syntax styles
+- Even line numbers (2, 4, 6...): Use "even" syntax styles
+
+What gets assigned line numbers:
+- Header lines (`~ROML~`, META tags)
 - Key-value pairs
-- Object opening braces (`key{`)
-- Object closing braces (`}`)
-- Array opening brackets (`key[`)
-- Array closing brackets (`]`)
+- Object markers (`key{` and `}`)
+- Array markers (`key[` and `]`)
 - Array item markers (`[0]{`, `[1]{`, etc.)
-- Empty lines
 
-Indentation does not affect line counting. A line at any indentation level counts as one line.
+What does NOT affect line counting:
+- Indentation
+- Comments (lines starting with `#` that are not META tags)
 
-## Alternating Line Behavior
+## Syntax Style Sets
 
-ROML uses different syntax styles for odd-numbered lines (1, 3, 5, ...) versus even-numbered lines (2, 4, 6, ...).
+ROML uses two different sets of syntax styles based on line numbers.
 
-### Odd-Line Syntax Styles (Lines 1, 3, 5, ...)
+### Odd-Line Syntax Styles (Line numbers: 1, 3, 5, ...)
 
 1. **QUOTED**: `key="value"` - Double quotes around the value
 2. **AMPERSAND**: `&key&value` - Ampersands surround both key and value
@@ -35,7 +47,7 @@ ROML uses different syntax styles for odd-numbered lines (1, 3, 5, ...) versus e
 7. **AT_SANDWICH**: `@key@value@` - At signs surround and separate key and value
 8. **UNDERSCORE**: `_key_value_` - Underscores surround and separate key and value
 
-### Even-Line Syntax Styles (Lines 2, 4, 6, ...)
+### Even-Line Syntax Styles (Line numbers: 2, 4, 6, ...)
 
 1. **EQUALS**: `key=value` - Equals sign separator
 2. **COLON**: `key:value` - Colon separator
@@ -198,7 +210,7 @@ To decode ROML back to JSON:
 
 ## Complete Example
 
-Given this JSON:
+Input JSON:
 ```json
 {
   "name": "Robert",
@@ -215,25 +227,63 @@ Given this JSON:
 }
 ```
 
-The ROML encoding would be:
+Output ROML:
 ```roml
-~ROML~
-name="Robert"              // Line 2 (even): semantic match overridden by even line
-age:30                     // Line 3 (odd): number on odd line → ampersand
-active<true>               // Line 4 (even): boolean on even line → equals with yes/no
-email~robert@example.com   // Line 5 (odd): semantic personal → quoted
-//salary//75000            // Line 6 (even): would normally use even style
-@created@2024-01-01@       // Line 7 (odd): semantic temporal → at-sandwich
-tags||dev||admin||         // Line 8 (even): array (style by hash)
-settings{                  // Line 9 (odd): object opener
-  theme="dark"             // Line 10 (even): nested, vowel-free → equals
-  notifications=yes        // Line 11 (odd): boolean on odd → brackets
-}                          // Line 12 (even): object closer
+~ROML~                     // Header (not counted)
+name="Robert"              // Counter: 1 (odd) - semantic PERSONAL → quoted style
+age:30                     // Counter: 2 (even) - number → colon style
+active<true>               // Counter: 3 (odd) - boolean → brackets style
+email~robert@example.com   // Counter: 4 (even) - vowel-starting key → tilde style
+//salary//75000            // Counter: 5 (odd) - semantic FINANCIAL → fake comment style
+created=2024-01-01         // Counter: 6 (even) - string → equals style (no semantic on even)
+tags<dev><admin>           // Counter: 7 (odd) - array uses BRACKETS style (hash-selected)
+settings{                  // Counter: 8 (even) - object opener
+  //theme//dark            // Counter: 9 (odd) - string → fake comment style
+  notifications=yes        // Counter: 10 (even) - boolean → equals with yes
+}                          // Counter: 11 (odd) - object closer
 ```
 
-Note: Output depends on line counting and implementation details.
+## Counter Examples
 
-## Important Notes
+### Without META Tag
+```json
+{"a": true, "b": 42}
+```
+Becomes:
+```roml
+~ROML~          // Header (counter not started)
+a<true>         // Counter: 1 (odd) → brackets for boolean
+b:42            // Counter: 2 (even) → colon for number
+```
+
+### With META Tag
+```json
+{"a": 1, "b": 2, "c": 3}
+```
+Becomes:
+```roml
+~ROML~                                  // Header (counter not started)
+# ~META~ SIEVE_OF_ERATOSTHENES_INVOKED // META tag (counter not started)
+a:1                                     // Counter: 2 (even) → colon for number (no prefix, 1 isn't prime)
+&!b&2                                   // Counter: 3 (odd) → ampersand for number with prime prefix
+!c:3                                    // Counter: 4 (even) → colon for number with prime prefix
+```
+
+The META tag shifts the alternating pattern by changing the counter's starting value from odd to even.
+
+### Nested Objects
+```roml
+~ROML~
+data{           // Counter: 1 (odd)
+  x=10          // Counter: 2 (even)
+  y<true>       // Counter: 3 (odd)
+}               // Counter: 4 (even)
+next=value      // Counter: 5 (odd)
+```
+
+Nesting depth does not affect counter progression.
+
+## Design Principles
 
 1. **No formal specification exists** - This is intentional. ROML is defined by its implementation, not by a specification.
 
@@ -249,17 +299,17 @@ Note: Output depends on line counting and implementation details.
 
 ## Prime Number Detection and Prefixes
 
-ROML includes an optional prime number detection system that adds metadata and special prefixes to enhance the format's deterministic chaos.
+ROML includes prime number detection that adds metadata and special prefixes when prime values are present.
 
 ### Prime Detection Rules
 
-**What Gets Detected:**
+Detection criteria:
 - Only **numeric values** (JavaScript `number` type) are checked for primality
 - String values like `"7"` or `"prime"` are **NOT** considered prime numbers
 - Negative numbers, zero, and one are **NOT** considered prime
 - Both integer and floating-point numbers are checked (though only integers can be prime)
 
-**Prime Prefix System:**
+Prefix system:
 - Keys whose **values** are prime numbers get a `!` prefix
 - Example: `{"count": 7}` becomes `!count:7` in ROML
 - The prefix appears on the **key**, not the value
@@ -275,12 +325,11 @@ When any prime numbers are detected in the data:
 
 ### Validation Rules
 
-**Bidirectional Validation:**
-- Documents with prime numbers **MUST** include the META tag
-- Documents with the META tag **MUST** contain prime numbers
-- Violations of either rule result in parse errors
+- Documents with prime numbers must include the META tag
+- Documents with the META tag must contain prime numbers
+- Violations result in parse errors
 
-**Error Scenarios:**
+Error examples:
 ```roml
 # ERROR: Prime numbers without META tag
 !count:7
@@ -295,14 +344,12 @@ count:4
 value:6
 ```
 
-**Validation Messages:**
+Parser error messages:
 - Missing META: "Document contains prime-prefixed keys but is missing the required ~META~ SIEVE_OF_ERATOSTHENES_INVOKED tag"
 - Unused META: "Document declares ~META~ SIEVE_OF_ERATOSTHENES_INVOKED but contains no prime-prefixed keys"
 - Invalid prefix: "Invalid prime prefix at line X: Key '!name' is marked as prime but value 8 is not a prime number"
 
 ### Prime Detection Examples
-
-**Valid Prime Usage:**
 ```roml
 ~ROML~
 # ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
@@ -312,7 +359,7 @@ composite:4       # 4 is not prime
 message="seven"   # Non-numeric string (preserved as string)
 ```
 
-**String vs Number Distinction:**
+String vs number distinction:
 ```json
 {
   "primeNumber": 7,     // Gets ! prefix (numeric 7 is prime)
@@ -322,7 +369,7 @@ message="seven"   # Non-numeric string (preserved as string)
 ```
 
 
-**Array Handling:**
+Array handling:
 ```roml
 ~ROML~
 # ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
@@ -331,7 +378,7 @@ mixed:2:4:7:9           # Mixed array (contains some primes)
 strings["2","3","5"]    # String array (no numeric primes)
 ```
 
-**Nested Objects:**
+Nested objects:
 ```roml
 ~ROML~
 # ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
@@ -345,14 +392,12 @@ data{
 ```
 
 ### Round-Trip Conversion
-
-**Perfect Preservation:**
 - Prime prefixes are stripped during parsing: `!count:7` → `{"count": 7}`
 - Original data is perfectly preserved through JSON→ROML→JSON conversion
 - META tag is automatically generated when converting from JSON containing primes
 - Parser validates prefix correctness and META tag consistency
 
-**Implementation Notes:**
+Implementation details:
 - Prime detection uses Sieve of Eratosthenes for numbers ≤ 10,000
 - Larger numbers use trial division for efficiency
 - Prime detection occurs during JSON→ROML conversion
@@ -364,12 +409,11 @@ See `examples/primes.roml` for a comprehensive example showing all prime number 
 
 ROML uses a simple and elegant rule to preserve type information during round-trip conversion:
 
-### The Rule
-**Quoted values are always preserved as strings.** When a value is enclosed in double quotes, it will always be parsed as a string, never converted to another type.
+Quoted values are always preserved as strings. When a value is enclosed in double quotes, it will always be parsed as a string, never converted to another type.
 
-### Examples
+### Type Examples
 
-**String vs Number:**
+String vs Number:
 ```roml
 count="7"      # String "7" (quotes preserve string type)
 count=7        # Number 7 (no quotes, parsed as number)
@@ -377,7 +421,7 @@ price="19.99"  # String "19.99"
 price=19.99    # Number 19.99
 ```
 
-**String vs Boolean:**
+String vs Boolean:
 ```roml
 active="true"  # String "true" (quotes preserve string type)
 active=true    # Boolean true (no quotes, parsed as boolean)
@@ -385,31 +429,26 @@ active=yes     # Boolean true (even-line syntax)
 active="yes"   # String "yes" (quotes preserve string)
 ```
 
-**String vs Null:**
+String vs Null:
 ```roml
 value="null"   # String "null" (quotes preserve string type)
 value=__NULL__ # Actual null value
 ```
 
-### How It Works
+During encoding (JSON→ROML):
+- Strings that look like numbers, booleans, or null are automatically quoted
+- Example: `{"count": "7"}` → `count="7"`
+- Regular strings may or may not be quoted depending on syntax style
 
-1. **During Encoding (JSON→ROML):**
-   - Strings that look like numbers, booleans, or null are automatically quoted
-   - Example: `{"count": "7"}` → `count="7"`
-   - Regular strings may or may not be quoted depending on syntax style
+During parsing (ROML→JSON):
+- Values with quotes are preserved as strings
+- Values without quotes undergo type inference
 
-2. **During Parsing (ROML→JSON):**
-   - If a value has quotes, it's preserved as a string
-   - If no quotes, the parser attempts type inference
+Arrays follow the same rules:
+- `items||"7"||7||` → `["7", 7]` (string "7" and number 7)
+- `values<"true"><false>` → `["true", false]` (string and boolean)
 
-3. **Arrays:**
-   - Same rule applies to array elements
-   - `items||"7"||7||` → `["7", 7]` (string "7" and number 7)
-   - `values<"true"><false>` → `["true", false]` (string and boolean)
-
-### Perfect Round-Trip Guarantee
-
-This rule ensures that:
+This ensures perfect round-trip conversion:
 ```json
 // Original JSON
 {
@@ -428,8 +467,6 @@ This rule ensures that:
 }
 ```
 
-### Implementation Note
-
-ROML automatically detects "ambiguous strings" (strings that look like other types) and adds quotes during encoding to ensure they remain strings after parsing. This happens transparently - you don't need to manually add quotes.
+ROML automatically detects ambiguous strings (strings that look like other types) and adds quotes during encoding to ensure they remain strings after parsing.
 
 The authoritative definition of ROML is its implementation, not this documentation.
