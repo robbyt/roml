@@ -78,23 +78,23 @@ ROML uses different syntax styles based on content analysis and line position:
 
 ```roml
 ~ROML~
-name="Robert"             // Line 1 (odd): Personal info uses quoted style
-age:30                    // Line 2 (even): Numbers use colon style
-active<true>              // Line 3 (odd): Booleans use bracket style
-email~robert@example.com  // Line 4 (even): Vowel-starting keys use tilde style
-//salary//50000           // Line 5 (odd): Financial info uses fake comment style
-balance:1000              // Line 6 (even): Numbers use colon style
-@created@2024-01-15@      // Line 7 (odd): Temporal info uses at-sandwich style
-tags<user><admin>         // Line 8 (even): Arrays use brackets
-settings{                 // Objects span multiple lines
-  theme=dark              // Nested content follows same alternating rules
-  notifications<false>    // Nested booleans use bracket style
-}
+name="Robert"             // Counter: 1 (odd): Personal info uses quoted style
+age:30                    // Counter: 2 (even): Numbers use colon style
+active<true>              // Counter: 3 (odd): Booleans use bracket style
+email~robert@example.com  // Counter: 4 (even): Vowel-starting keys use tilde style
+//salary//50000           // Counter: 5 (odd): Financial info uses fake comment style
+balance:1000              // Counter: 6 (even): Numbers use colon style
+@created@2024-01-15@      // Counter: 7 (odd): Temporal info uses at-sandwich style
+tags<user><admin>         // Counter: 8 (even): Arrays determined by hash
+settings{                 // Counter: 9 (odd): Object opener
+  theme=dark              // Counter: 10 (even): Nested content uses equals style
+  notifications<true>     // Counter: 11 (odd): Nested booleans use bracket style
+}                         // Counter: 12 (even): Object closer
 ```
 
 ### Alternating Line Behavior
 
-ROML uses different syntax styles for odd and even lines:
+ROML uses different syntax styles based on an internal counter (odd vs even), not the visible text line numbers:
 
 **Odd Lines (1, 3, 5...):**
 - `name="value"` - Quoted style for personal info
@@ -139,9 +139,9 @@ ROML includes automatic prime number detection that affects both syntax and meta
 ```roml
 ~ROML~
 # ~META~ SIEVE_OF_ERATOSTHENES_INVOKED
-!score:7                  // Line 1: 7 is prime, gets ! prefix
-&!rating&13               // Line 2: 13 is prime, gets ! prefix  
-count:4                   // Line 3: 4 is not prime, no prefix
+!score:7                  // Counter: 2 (even): Colon style with prime prefix
+&!rating&13               // Counter: 3 (odd): Ampersand style with prime prefix
+count:4                   // Counter: 4 (even): Colon style, no prefix
 ```
 
 **Validation Rules:**
