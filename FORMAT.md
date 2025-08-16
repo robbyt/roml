@@ -6,30 +6,37 @@ This document describes ROML (Robert's Opaque Mangling Language) encoding and de
 
 ROML documents begin with `~ROML~` on line 1. Subsequent content follows alternating line behavior rules.
 
-## Line Counting Rules
+## Line-Based Syntax Selection
 
-ROML uses an internal line counter for determining syntax styles, not visible text line numbers.
+ROML uses line numbers to determine which syntax style to use for each data element.
 
-The counter starts after all header lines are processed. Its initial value equals the number of header lines:
-- With just `~ROML~`: counter starts at 1 (odd)
-- With `~ROML~` and a META tag: counter starts at 2 (even)
+Each line in the document gets a sequential number starting from 1:
+- Line 1: `~ROML~` header (odd)
+- Line 2+: META tags (if any, alternating even/odd)
+- Next line: First data element
+- Subsequent lines: Additional data elements
+- And so on...
 
-The counter increments for each data element:
+Data elements use syntax styles based on whether their line number is odd or even:
+- Odd line numbers (1, 3, 5...): Use "odd" syntax styles
+- Even line numbers (2, 4, 6...): Use "even" syntax styles
+
+What gets assigned line numbers:
+- Header lines (`~ROML~`, META tags)
 - Key-value pairs
 - Object markers (`key{` and `}`)
 - Array markers (`key[` and `]`)
 - Array item markers (`[0]{`, `[1]{`, etc.)
 
-The counter does not increment for:
-- Header lines (`~ROML~`, META tags)
+What does NOT affect line counting:
 - Indentation
-- Comments
+- Comments (lines starting with `#` that are not META tags)
 
-## Alternating Line Behavior
+## Syntax Style Sets
 
-ROML alternates between two sets of syntax styles based on whether the internal counter is odd or even.
+ROML uses two different sets of syntax styles based on line numbers.
 
-### Odd-Line Syntax Styles (Internal counter: 1, 3, 5, ...)
+### Odd-Line Syntax Styles (Line numbers: 1, 3, 5, ...)
 
 1. **QUOTED**: `key="value"` - Double quotes around the value
 2. **AMPERSAND**: `&key&value` - Ampersands surround both key and value
@@ -40,7 +47,7 @@ ROML alternates between two sets of syntax styles based on whether the internal 
 7. **AT_SANDWICH**: `@key@value@` - At signs surround and separate key and value
 8. **UNDERSCORE**: `_key_value_` - Underscores surround and separate key and value
 
-### Even-Line Syntax Styles (Internal counter: 2, 4, 6, ...)
+### Even-Line Syntax Styles (Line numbers: 2, 4, 6, ...)
 
 1. **EQUALS**: `key=value` - Equals sign separator
 2. **COLON**: `key:value` - Colon separator
