@@ -15,6 +15,7 @@ export enum MetaTags {
  */
 export interface DocumentFeatures {
   readonly primesDetected: boolean;
+  readonly rootType: 'object' | 'array' | 'primitive';
   // Future features can be added here:
   // readonly hasComplexArrays: boolean;
   // readonly containsNestedObjects: boolean;
@@ -34,6 +35,7 @@ export interface LineFeatures {
   readonly isSpecialValue: boolean;
   readonly nestingDepth: number;
   readonly needsQuotes: boolean;
+  readonly needsQuotedKey: boolean;
 }
 
 /**
@@ -41,6 +43,7 @@ export interface LineFeatures {
  */
 export const EMPTY_DOCUMENT_FEATURES: DocumentFeatures = {
   primesDetected: false,
+  rootType: 'object',
 } as const;
 
 /**
@@ -55,4 +58,5 @@ export const EMPTY_LINE_FEATURES: LineFeatures = {
   isSpecialValue: false,
   nestingDepth: 0,
   needsQuotes: false,
+  needsQuotedKey: false,
 } as const;

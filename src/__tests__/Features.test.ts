@@ -234,7 +234,7 @@ describe('ROML Features Infrastructure', () => {
 
         // Should contain proper special value encoding
         expect(output).toContain('__NULL__');
-        expect(output).toContain('__EMPTY__');
+        expect(output).toContain('""'); // Empty strings now preserved as quoted empty strings
 
         // Should handle all types without errors
         expect(output).toMatch(/^~ROML~/);
