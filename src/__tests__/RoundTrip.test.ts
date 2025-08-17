@@ -364,8 +364,105 @@ flag4=no`;
 
       expect(romlContent).toContain('//value1//__NULL__'); // Odd line
       expect(romlContent).toContain('value2=__NULL__'); // Even line: equals for special values
-      expect(romlContent).toContain('//value3//__EMPTY__'); // Odd line
-      expect(romlContent).toContain('value4=__EMPTY__'); // Even line: equals for special values
+      expect(romlContent).toContain('//value3//""'); // Odd line - empty string preserved as quoted
+      expect(romlContent).toContain('value4=""'); // Even line: equals style with quoted empty string
+    });
+  });
+
+  describe('Complex JSON Acceptance Test', () => {
+    it('should round-trip complex JSON test pattern from json-acceptance-tests', () => {
+      // Complex JSON from https://github.com/briandfoy/json-acceptance-tests/blob/master/json-checker/pass1.json
+      // This tests top-level array support with complex nested structures
+      const complexJsonData = [
+        'JSON Test Pattern pass1',
+        { 'object with 1 member': ['array with 1 element'] },
+        {},
+        [],
+        -42,
+        true,
+        false,
+        null,
+        {
+          integer: 1234567890,
+          real: -9876.54321,
+          e: 0.123456789e-12,
+          E: 1.23456789e34,
+          '': 23456789012e66,
+          zero: 0,
+          one: 1,
+          space: ' ',
+          quote: '"',
+          backslash: '\\',
+          controls: '\b\f\n\r\t',
+          slash: '/ & \/', // eslint-disable-line no-useless-escape
+          alpha: 'abcdefghijklmnopqrstuvwyz',
+          ALPHA: 'ABCDEFGHIJKLMNOPQRSTUVWYZ',
+          digit: '0123456789',
+          '0123456789': 'digit',
+          special: "`1~!@#$%^&*()_+-={':[,]}|;.</>?",
+          hex: '\u0123\u4567\u89AB\uCDEF\uabcd\uef4A',
+          true: true,
+          false: false,
+          null: null,
+          array: [],
+          object: {},
+          address: '50 St. James Street',
+          url: 'http://www.JSON.org/',
+          comment: '// /* <!-- --',
+          '# -- --> */': ' ',
+          ' s p a c e d ': [1, 2, 3, 4, 5, 6, 7],
+          compact: [1, 2, 3, 4, 5, 6, 7],
+          jsontext: '{"object with 1 member":["array with 1 element"]}',
+          quotes: '&#34; \u0022 %22 0x22 034 &#x22;',
+          // eslint-disable-next-line no-useless-escape
+          '\/\\"\uCAFE\uBABE\uAB98\uFCDE\ubcda\uef4A\b\f\n\r\t`1~!@#$%^&*()_+-=[]{}|;:\',./<>?':
+            'A key can be any string',
+        },
+        0.5,
+        98.6,
+        99.44,
+        1066,
+        1e1,
+        0.1e1,
+        1e-1,
+        1,
+        2,
+        2,
+        'rosebud',
+      ];
+
+      // Test round-trip conversion
+      const romlContent = RomlFile.jsonToRoml(complexJsonData);
+      const roundTripData = RomlFile.romlToJson(romlContent);
+
+      // Should preserve all data exactly
+      expect(roundTripData).toEqual(complexJsonData);
+    });
+
+    it('should handle top-level primitives', () => {
+      const testCases = [42, 'hello world', true, false, null, 3.14159, -123];
+
+      for (const primitive of testCases) {
+        const romlContent = RomlFile.jsonToRoml(primitive);
+        const roundTripData = RomlFile.romlToJson(romlContent);
+        expect(roundTripData).toEqual(primitive);
+      }
+    });
+
+    it('should handle simple top-level arrays', () => {
+      const testArrays = [
+        [1, 2, 3],
+        ['a', 'b', 'c'],
+        [true, false, null],
+        [{ name: 'test' }, { value: 42 }],
+        [],
+      ];
+
+      for (const array of testArrays) {
+        const romlContent = RomlFile.jsonToRoml(array);
+        const roundTripData = RomlFile.romlToJson(romlContent);
+        expect(roundTripData).toEqual(array);
+      }
     });
   });
 

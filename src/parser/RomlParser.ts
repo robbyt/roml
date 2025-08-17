@@ -53,7 +53,7 @@ export interface RomlObjectNode extends BaseASTNode {
 export interface RomlArrayNode extends BaseASTNode {
   type: 'array';
   key: string;
-  items: (RomlValueNode | RomlObjectNode)[];
+  items: (RomlValueNode | RomlObjectNode | RomlArrayNode)[];
   arrayStyle: 'structured' | 'inline';
 }
 
@@ -177,10 +177,14 @@ export class RomlParser {
   }
 
   private parseChildObject(token: RomlToken): RomlObjectNode | null {
-    if (!token.key) return null;
+    if (token.key === undefined) return null;
 
     // Strip prime prefix from object key
-    const cleanKey = token.key.startsWith('!') ? token.key.substring(1) : token.key;
+    let cleanKey = token.key;
+    if (token.key.startsWith('!')) {
+      this.primesDetected = true;
+      cleanKey = token.key.substring(1);
+    }
 
     this.advance();
     const childObject = this.parseObject(cleanKey, (token.depth || 0) + 1);
@@ -188,13 +192,17 @@ export class RomlParser {
   }
 
   private parseChildArray(token: RomlToken): RomlArrayNode | null {
-    if (!token.key) return null;
+    if (token.key === undefined) return null;
 
     // Strip prime prefix from array key
-    const cleanKey = token.key.startsWith('!') ? token.key.substring(1) : token.key;
+    let cleanKey = token.key;
+    if (token.key.startsWith('!')) {
+      this.primesDetected = true;
+      cleanKey = token.key.substring(1);
+    }
 
     this.advance();
-    const items: (RomlValueNode | RomlObjectNode)[] = [];
+    const items: (RomlValueNode | RomlObjectNode | RomlArrayNode)[] = [];
 
     while (this.position < this.tokens.length) {
       const current = this.current();
@@ -209,7 +217,48 @@ export class RomlParser {
         this.advance();
         const itemObject = this.parseObject(current.key, (current.depth || 0) + 1);
         items.push(itemObject);
+      } else if (current.type === 'ARRAY_START') {
+        // Handle nested arrays
+        const nestedArray = this.parseChildArray(current);
+        if (nestedArray) {
+          items.push(nestedArray);
+        }
       } else if (current.type === 'KEY_VALUE') {
+        // Handle primitive array items (e.g., [0]:42, [1]//text)
+        // Check for prime prefixes in array item keys
+        if (current.key && current.key.startsWith('!')) {
+          this.primesDetected = true;
+          // Validate that the value is actually prime (same logic as parseKeyValue)
+          let numericValue: number | null = null;
+          if (typeof current.parsedValue === 'number') {
+            numericValue = current.parsedValue;
+          } else if (typeof current.parsedValue === 'string') {
+            const parsed = parseFloat(current.parsedValue);
+            if (!isNaN(parsed) && String(parsed) === current.parsedValue) {
+              numericValue = parsed;
+            }
+          }
+          if (numericValue !== null && !this.isPrime(numericValue)) {
+            this.invalidPrimeKeys.push(
+              `Line ${current.lineNumber + 1}: Key "${current.key}" has prime prefix but value ${numericValue} is not prime`
+            );
+            this.errors.push(
+              `Invalid prime prefix at line ${current.lineNumber + 1}: Key "${current.key}" is marked as prime but value ${numericValue} is not a prime number`
+            );
+          }
+        }
+
+        const arrayIndex = this.extractArrayIndex(current.key || '');
+        const valueNode: RomlValueNode = {
+          type: 'value',
+          value: current.parsedValue !== undefined ? current.parsedValue : current.value,
+          index: arrayIndex,
+          startOffset: current.startOffset,
+          endOffset: current.endOffset || current.startOffset,
+          lineNumber: current.lineNumber || 0,
+          depth: current.depth || 0,
+        };
+        items.push(valueNode);
         this.advance();
       } else {
         this.advance();
@@ -229,7 +278,7 @@ export class RomlParser {
   }
 
   private parseKeyValue(token: RomlToken): RomlKeyValueNode | null {
-    if (!token.key || token.parsedValue === undefined) return null;
+    if (token.key === undefined || token.parsedValue === undefined) return null;
 
     // Check for prime prefixes and validate
     let cleanKey = token.key;
@@ -272,7 +321,30 @@ export class RomlParser {
   }
 
   private astToData(ast: RomlDocumentNode): any {
-    return this.objectNodeToData(ast.body);
+    const objectData = this.objectNodeToData(ast.body);
+
+    // Unwrap synthetic objects back to original types
+    return this.unwrapSyntheticObject(objectData);
+  }
+
+  /**
+   * Unwrap synthetic objects back to their original types
+   */
+  private unwrapSyntheticObject(data: Record<string, any>): any {
+    const keys = Object.keys(data);
+
+    // Check for array wrapper: {"_items": [...]}
+    if (keys.length === 1 && keys[0] === '_items' && Array.isArray(data._items)) {
+      return data._items;
+    }
+
+    // Check for primitive wrapper: {"_value": ...}
+    if (keys.length === 1 && keys[0] === '_value') {
+      return data._value;
+    }
+
+    // Regular object - return as-is
+    return data;
   }
 
   private objectNodeToData(node: RomlObjectNode): Record<string, any> {
@@ -297,6 +369,8 @@ export class RomlParser {
     return node.items.map((item) => {
       if (item.type === 'object') {
         return this.objectNodeToData(item);
+      } else if (item.type === 'array') {
+        return this.arrayNodeToData(item);
       } else {
         return item.value;
       }
@@ -331,6 +405,12 @@ export class RomlParser {
 
   private findTokenOfType(type: RomlToken['type']): RomlToken | undefined {
     return this.tokens.find((token) => token.type === type);
+  }
+
+  private extractArrayIndex(key: string): number {
+    // Extract array index from keys like "[0]", "[1]", etc.
+    const match = key.match(/\[(\d+)\]/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   private checkForMetaTag(): void {

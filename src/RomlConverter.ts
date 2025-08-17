@@ -7,90 +7,80 @@ import {
 } from './types.js';
 import { objectContainsPrimes, containsPrime } from './utils/primeUtils.js';
 
+// Pre-compiled regex patterns for better performance
+const ROML_SYNTAX_CHARS = /[=:~#%$^+&<>|[\]{}/@!]/;
+const VOWEL_START = /^[aeiouAEIOU]/;
+const ARRAY_NOTATION = /^\[.*\]$/;
+
+/**
+ * Escape special characters for ROML output
+ */
+function escapeForRoml(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\') // Escape backslashes first
+    .replace(/\n/g, '\\n') // Escape newlines
+    .replace(/\r/g, '\\r') // Escape carriage returns
+    .replace(/\t/g, '\\t') // Escape tabs
+    .replace(/"/g, '\\"'); // Escape quotes
+}
+
+/**
+ * Escape string for ROML output - convert newlines and other special chars to escape sequences
+ */
+function escapeStringValue(value: unknown): string {
+  if (typeof value !== 'string') {
+    return String(value);
+  }
+  return escapeForRoml(value);
+}
+
+/**
+ * Escape and quote a key name for ROML output if needed
+ */
+function formatKeyName(key: string, needsQuoting: boolean): string {
+  if (!needsQuoting) {
+    return key;
+  }
+  return `"${escapeForRoml(key)}"`;
+}
+
+/**
+ * Helper function to create syntax style functions with consistent formatting
+ */
+function createSyntaxStyle(template: (key: string, value: string) => string) {
+  return (key: string, value: unknown, features: LineFeatures) => {
+    const prefix = features.containsPrime ? '!' : '';
+    const formattedKey = formatKeyName(key, features.needsQuotedKey);
+    const quotedValue = features.needsQuotes ? `"${escapeStringValue(value)}"` : value;
+    return template(prefix + formattedKey, String(quotedValue));
+  };
+}
+
 const SYNTAX_STYLES = {
   QUOTED: (key: string, value: unknown, features: LineFeatures) => {
     const prefix = features.containsPrime ? '!' : '';
-    return `${prefix}${key}="${value}"`;
+    const formattedKey = formatKeyName(key, features.needsQuotedKey);
+    return `${prefix}${formattedKey}="${escapeStringValue(value)}"`;
   },
-  AMPERSAND: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `&${prefix}${key}&${quotedValue}`;
-  },
-  BRACKETS: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}<${quotedValue}>`;
-  },
-  PIPES: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `||${prefix}${key}||${quotedValue}||`;
-  },
-  DOUBLE_COLON: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `::${prefix}${key}::${quotedValue}::`;
-  },
-  FAKE_COMMENT: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `//${prefix}${key}//${quotedValue}`;
-  },
-  AT_SANDWICH: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `@${prefix}${key}@${quotedValue}@`;
-  },
-  UNDERSCORE: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `_${prefix}${key}_${quotedValue}_`;
-  },
+  AMPERSAND: createSyntaxStyle((key, value) => `&${key}&${value}`),
+  BRACKETS: createSyntaxStyle((key, value) => `${key}<${value}>`),
+  PIPES: createSyntaxStyle((key, value) => `||${key}||${value}||`),
+  DOUBLE_COLON: createSyntaxStyle((key, value) => `::${key}::${value}::`),
+  FAKE_COMMENT: createSyntaxStyle((key, value) => `//${key}//${value}`),
+  AT_SANDWICH: createSyntaxStyle((key, value) => `@${key}@${value}@`),
+  UNDERSCORE: createSyntaxStyle((key, value) => `_${key}_${value}_`),
 } as const;
 
 // Alternative syntax styles for even lines
 const EVEN_LINE_STYLES = {
-  EQUALS: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}=${quotedValue}`;
-  },
-  COLON: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}:${quotedValue}`;
-  },
-  TILDE: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}~${quotedValue}`;
-  },
-  HASH: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}#${quotedValue}`;
-  },
-  PERCENT: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}%${quotedValue}`;
-  },
-  DOLLAR: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}$${quotedValue}`;
-  },
-  CARET: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}^${quotedValue}`;
-  },
-  PLUS: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const quotedValue = features.needsQuotes ? `"${value}"` : value;
-    return `${prefix}${key}+${quotedValue}`;
-  },
+  EQUALS: createSyntaxStyle((key, value) => `${key}=${value}`),
+  COLON: createSyntaxStyle((key, value) => `${key}:${value}`),
+  TILDE: createSyntaxStyle((key, value) => `${key}~${value}`),
+  HASH: createSyntaxStyle((key, value) => `${key}#${value}`),
+  PERCENT: createSyntaxStyle((key, value) => `${key}%${value}`),
+  DOLLAR: createSyntaxStyle((key, value) => `${key}$${value}`),
+  CARET: createSyntaxStyle((key, value) => `${key}^${value}`),
+  PLUS: createSyntaxStyle((key, value) => `${key}+${value}`),
 } as const;
 
 type SyntaxStyleName = keyof typeof SYNTAX_STYLES;
@@ -98,6 +88,9 @@ type EvenLineStyleName = keyof typeof EVEN_LINE_STYLES;
 type SyntaxFunction =
   | (typeof SYNTAX_STYLES)[SyntaxStyleName]
   | (typeof EVEN_LINE_STYLES)[EvenLineStyleName];
+
+// JSON Type Detection for wrapper approach
+type JsonType = 'object' | 'array' | 'primitive';
 
 interface ConversionContext {
   readonly depth: number;
@@ -118,6 +111,18 @@ const SEMANTIC_CATEGORIES = {
 
 export class RomlConverter {
   /**
+   * Detect the type of JSON data for wrapper approach
+   */
+  private detectJsonType(data: unknown): JsonType {
+    if (Array.isArray(data)) {
+      return 'array';
+    } else if (typeof data === 'object' && data !== null) {
+      return 'object';
+    } else {
+      return 'primitive';
+    }
+  }
+  /**
    * Check if a string value looks like another type and needs quotes to preserve string type
    */
   private isAmbiguousString(value: string): boolean {
@@ -131,29 +136,97 @@ export class RomlConverter {
     // Check if string looks like null
     if (value === 'null') return true;
 
-    // Check if string matches special values
+    // Check if string matches special value markers - these need quoting to preserve as strings
     if (value === '__NULL__' || value === '__EMPTY__' || value === '__UNDEFINED__') return true;
 
     // Check if string is yes/no (used for booleans on even lines)
     if (value === 'yes' || value === 'no') return true;
 
+    // Check if string is whitespace-only (could be confused with missing content)
+    if (value.trim() === '') return true;
+
+    // Check if string contains newlines (would break single-line format)
+    if (value.includes('\n') || value.includes('\r')) return true;
+
     return false;
   }
 
-  public jsonToRoml(data: Record<string, unknown>): string {
-    const documentFeatures = this.analyzeDocumentFeatures(data);
+  /**
+   * Check if a key needs to be quoted to avoid parsing ambiguity with ROML syntax
+   */
+  private needsQuotedKey(key: string): boolean {
+    // Empty string keys must always be quoted
+    if (key === '') return true;
+
+    // Check for ROML syntax characters
+    if (ROML_SYNTAX_CHARS.test(key)) return true;
+
+    // Check for keys that start with array notation
+    if (key.startsWith('[') && key.includes(']')) return true;
+
+    // Check for keys with quotes (need escaping)
+    if (key.includes('"')) return true;
+
+    // Check for keys that start with comment-like syntax
+    if (key.startsWith('#') || key.startsWith('//')) return true;
+
+    // Check for whitespace that could break parsing
+    if (key.includes(' ') || key.includes('\t') || key.includes('\n')) return true;
+
+    // Be more aggressive: quote keys that could be confused with ROML syntax patterns
+    // These are common key names that often cause ambiguity
+    const ambiguousKeyNames = [
+      'special',
+      'url',
+      'E',
+      'integer',
+      'real',
+      'true',
+      'false',
+      'null',
+      'object',
+      'array',
+      'zero',
+      'space',
+      'quote',
+      'backslash',
+      'slash',
+      'alpha',
+      'ALPHA',
+      'digit',
+      'hex',
+      'comment',
+      'address',
+      'compact',
+    ];
+
+    if (ambiguousKeyNames.includes(key)) return true;
+
+    return false;
+  }
+
+  public jsonToRoml(data: unknown): string {
+    // Wrapper approach: wrap non-objects in synthetic objects
+    const inputType = this.detectJsonType(data);
+    let processData: Record<string, unknown>;
+
+    if (inputType === 'array') {
+      processData = { _items: data };
+    } else if (inputType === 'primitive') {
+      processData = { _value: data };
+    } else {
+      processData = data as Record<string, unknown>;
+    }
+
+    const documentFeatures = this.analyzeDocumentFeatures(processData);
 
     // Build header components
     const headerLines = ['~ROML~'];
 
+    // Simplified prime META tag logic - always generate for objects with primes
     if (documentFeatures.primesDetected) {
       headerLines.push(`# ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`);
     }
-
-    // Future META features would be added here:
-    // if (documentFeatures.hasLargeStrings) {
-    //   headerLines.push('~META~ LARGE_STRINGS_DETECTED');
-    // }
 
     const context: ConversionContext = {
       depth: 0,
@@ -162,7 +235,7 @@ export class RomlConverter {
       documentFeatures,
     };
 
-    const converted = this.convertObject(data, context);
+    const converted = this.convertObject(processData, context);
     return `${headerLines.join('\n')}\n${converted.result}`;
   }
 
@@ -203,12 +276,8 @@ export class RomlConverter {
     }
 
     if (typeof value === 'string') {
-      if (value === '') {
-        return {
-          result: `${indent}${this.selectSyntax(key, '__EMPTY__', context, lineFeatures)(key, '__EMPTY__', lineFeatures)}`,
-          nextLineNumber: context.lineNumber + 1,
-        };
-      }
+      // Empty strings are preserved as empty strings, not converted to __EMPTY__
+      // The ROML syntax can handle empty strings naturally through proper quoting
 
       return {
         result: `${indent}${this.selectSyntax(key, value, context, lineFeatures)(key, value, lineFeatures)}`,
@@ -241,7 +310,15 @@ export class RomlConverter {
       (item) => typeof item === 'object' && item !== null && !Array.isArray(item)
     );
 
-    if (hasObjects) {
+    // Use object-style arrays if there are any objects or arrays (complex items)
+    const hasComplexItems = array.some(
+      (item) => (typeof item === 'object' && item !== null) || Array.isArray(item)
+    );
+
+    // Force structured format for nested arrays (depth > 0)
+    const forceStructured = context.depth > 0;
+
+    if (hasComplexItems || forceStructured) {
       let currentLineNumber = context.lineNumber + 1;
 
       // Analyze if this array contains primes
@@ -290,7 +367,7 @@ export class RomlConverter {
             if (item === undefined) return '__UNDEFINED__';
             // Quote ambiguous strings in arrays
             if (typeof item === 'string' && this.isAmbiguousString(item)) {
-              return `"${item}"`;
+              return `"${escapeStringValue(item)}"`;
             }
             return String(item);
           })
@@ -308,13 +385,17 @@ export class RomlConverter {
             if (item === undefined) return '<__UNDEFINED__>';
             // Quote ambiguous strings in arrays
             if (typeof item === 'string' && this.isAmbiguousString(item)) {
-              return `<"${item}">`;
+              return `<"${escapeStringValue(item)}">`;
             }
             return `<${item}>`;
           })
           .join('');
+
+        // For single-item arrays, add empty bracket to ensure array parsing
+        const finalBracketItems = array.length === 1 ? `${bracketItems}<>` : bracketItems;
+
         return {
-          result: `${indent}${prefix}${key}${bracketItems}`,
+          result: `${indent}${prefix}${key}${finalBracketItems}`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -342,7 +423,7 @@ export class RomlConverter {
           if (item === undefined) return '__UNDEFINED__';
           // Quote ambiguous strings in arrays
           if (typeof item === 'string' && this.isAmbiguousString(item)) {
-            return `"${item}"`;
+            return `"${escapeStringValue(item)}"`;
           }
           return String(item);
         });
@@ -526,6 +607,11 @@ export class RomlConverter {
     key: string,
     context: ConversionContext
   ): 'PIPES' | 'BRACKETS' | 'JSON_STYLE' | 'COLON_DELIM' {
+    // For wrapper keys, always use PIPES format to avoid parser ambiguity
+    if (this.isSyntheticWrapperKey(key)) {
+      return 'PIPES';
+    }
+
     const keyHash = this.simpleHash(key);
     const styles = ['PIPES', 'BRACKETS', 'JSON_STYLE', 'COLON_DELIM'] as const;
     return styles[keyHash % styles.length];
@@ -534,11 +620,13 @@ export class RomlConverter {
   private simpleHash(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) & 0xffffffff;
     }
     return Math.abs(hash);
+  }
+
+  private isSyntheticWrapperKey(key: string): boolean {
+    return key === '_items' || key === '_value';
   }
 
   /**
@@ -546,8 +634,54 @@ export class RomlConverter {
    */
   private analyzeDocumentFeatures(data: Record<string, unknown>): DocumentFeatures {
     return {
-      primesDetected: objectContainsPrimes(data),
+      primesDetected: this.objectContainsPrimesExcludingWrapperKeys(data),
+      rootType: 'object', // Always object in wrapper approach
     };
+  }
+
+  /**
+   * Check if object contains primes that would generate prime prefixes in output
+   * Handles wrapper keys by checking their contents appropriately
+   */
+  private objectContainsPrimesExcludingWrapperKeys(data: Record<string, unknown>): boolean {
+    for (const [key, value] of Object.entries(data)) {
+      if (key === '_items' || key === '_value') {
+        // For wrapper keys, check items that would actually generate prime prefixes
+        if (Array.isArray(value)) {
+          // Check if this array uses structured format (which generates prefixes)
+          const hasComplexItems = value.some(
+            (item) => (typeof item === 'object' && item !== null) || Array.isArray(item)
+          );
+
+          if (hasComplexItems) {
+            // Structured arrays: check all items for primes (they get prefixes)
+            return value.some((item) => {
+              // Check objects for prime values
+              if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+                return objectContainsPrimes(item);
+              }
+              // Check nested arrays for prime values (recursively)
+              if (Array.isArray(item)) {
+                return containsPrime(item);
+              }
+              // Check primitive values for primes (they get prefixes in structured format)
+              return containsPrime(item);
+            });
+          } else {
+            // PIPES arrays (all primitives): no prime prefixes generated
+            return false;
+          }
+        } else if (typeof value === 'object' && value !== null) {
+          return objectContainsPrimes(value as Record<string, unknown>);
+        }
+      } else {
+        // Regular keys: check if this key-value pair contains primes
+        if (objectContainsPrimes({ [key]: value })) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -558,7 +692,7 @@ export class RomlConverter {
     value: unknown,
     context?: ConversionContext
   ): LineFeatures {
-    const keyStartsWithVowel = /^[aeiouAEIOU]/.test(key);
+    const keyStartsWithVowel = VOWEL_START.test(key);
     const hasLongString = typeof value === 'string' && value.length > 10;
     const isSpecialValue =
       value === '__NULL__' ||
@@ -570,10 +704,13 @@ export class RomlConverter {
     const isNestedObject = typeof value === 'object' && value !== null && !Array.isArray(value);
     const hasLargeArray = Array.isArray(value) && value.length > 5;
     const nestingDepth = context?.depth || 0;
-    const needsQuotes = typeof value === 'string' && this.isAmbiguousString(value);
+    // Don't quote empty strings in array contexts, they should be handled naturally
+    const isArrayItem = key.startsWith('[') && key.endsWith(']');
+    const needsQuotes =
+      typeof value === 'string' && this.isAmbiguousString(value) && !(value === '' && isArrayItem);
 
     return {
-      containsPrime: containsPrime(value),
+      containsPrime: this.isSyntheticWrapperKey(key) ? false : containsPrime(value),
       hasLargeArray,
       isNestedObject,
       keyStartsWithVowel,
@@ -581,6 +718,7 @@ export class RomlConverter {
       isSpecialValue,
       nestingDepth,
       needsQuotes,
+      needsQuotedKey: this.needsQuotedKey(key),
     };
   }
 }

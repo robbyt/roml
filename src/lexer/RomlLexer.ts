@@ -1,3 +1,15 @@
+/**
+ * Unescape string from ROML format - convert escape sequences back to actual characters
+ */
+function unescapeStringValue(value: string): string {
+  return value
+    .replace(/\\n/g, '\n') // Unescape newlines
+    .replace(/\\r/g, '\r') // Unescape carriage returns
+    .replace(/\\t/g, '\t') // Unescape tabs
+    .replace(/\\"/g, '"') // Unescape quotes
+    .replace(/\\\\/g, '\\'); // Unescape backslashes (must be last)
+}
+
 export interface RomlToken {
   type:
     | 'HEADER'
@@ -74,24 +86,20 @@ export class RomlLexer {
         continue;
       }
 
-      // Handle comment lines (including META tags)
-      if (trimmedLine.startsWith('#')) {
-        // Store comment lines in header token if they contain META
-        if (
-          trimmedLine.includes('~META~') &&
-          this.tokens.length > 0 &&
-          this.tokens[0].type === 'HEADER'
-        ) {
-          this.tokens[0].value = this.tokens[0].value + '\n' + trimmedLine;
-        }
-        // Skip all comment lines from tokenization
-        i++;
-        continue;
-      }
-
       const depth = this.calculateDepth(line);
       const lineNumber = startLineNum + i;
       const startOffset = this.getLineStartOffset(lineNumber);
+
+      // Handle comment lines (including META tags)
+      if (trimmedLine.startsWith('#')) {
+        // Preserve META tags as tokens for parser validation
+        if (trimmedLine.includes('~META~')) {
+          this.addToken('HEADER', trimmedLine, startOffset, lineNumber);
+        }
+        // Skip other comment lines from tokenization
+        i++;
+        continue;
+      }
 
       // Check for object end
       if (trimmedLine === '}') {
@@ -192,171 +200,310 @@ export class RomlLexer {
   }
 
   private parseKeyValueLine(line: string): [string, unknown, string] | null {
-    // Parse quoted style: name="value"
-    const quotedMatch = line.match(/^(.+?)="(.+)"$/);
+    // Helper function to extract and unescape quoted keys
+    const extractKey = (keyPart: string): string => {
+      const quotedKeyMatch = keyPart.match(/^"(.*)"$/);
+      if (quotedKeyMatch) {
+        // Unescape all special characters in key names (same as unescapeStringValue)
+        return unescapeStringValue(quotedKeyMatch[1]);
+      }
+      return keyPart;
+    };
+
+    // Check special cases FIRST before simple separator analysis
+    // This prevents complex patterns from being incorrectly split by analyzeLineStructure
+    const specialResult = this.parseSpecialCases(line, extractKey);
+    if (specialResult) {
+      return specialResult;
+    }
+
+    // Analyze line structure to identify style and key/value positions
+    const analysis = this.analyzeLineStructure(line);
+    if (analysis) {
+      const { style, keyPart, valuePart } = analysis;
+      const key = extractKey(keyPart);
+
+      // Parse the value based on the style
+      return this.parseValueForStyle(key, valuePart, style);
+    }
+
+    return null;
+  }
+
+  /**
+   * Analyze line structure to identify style and extract key/value parts
+   * This is the single point where quote-awareness is handled
+   */
+  private analyzeLineStructure(
+    line: string
+  ): { style: string; keyPart: string; valuePart: string } | null {
+    // First check for quoted pattern (special case)
+    const quotedMatch = line.match(/^(.+?)="(.*)"$/);
     if (quotedMatch) {
-      // Preserve quoted values as strings - don't convert types
-      const value = quotedMatch[2];
-      return [quotedMatch[1], value, 'QUOTED'];
+      return {
+        style: 'QUOTED',
+        keyPart: quotedMatch[1],
+        valuePart: quotedMatch[2],
+      };
     }
 
-    // Parse even-line equals style: key=value or key=yes/no or key="value"
-    const equalsMatch = line.match(/^(.+?)=(.+)$/);
-    if (equalsMatch && !quotedMatch) {
-      const value = equalsMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = value.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [equalsMatch[1], quotedValueMatch[1], 'EQUALS'];
+    // Check for AMPERSAND style FIRST: &key&value (handles quoted keys properly)
+    if (line.startsWith('&')) {
+      const content = line.slice(1); // Remove leading &
+      const ampersandPos = this.findSeparatorOutsideQuotes(content, '&');
+      if (ampersandPos !== -1) {
+        return {
+          style: 'AMPERSAND',
+          keyPart: content.slice(0, ampersandPos),
+          valuePart: content.slice(ampersandPos + 1),
+        };
       }
-      if (value === 'yes') return [equalsMatch[1], true, 'EQUALS'];
-      if (value === 'no') return [equalsMatch[1], false, 'EQUALS'];
-      return [equalsMatch[1], this.parseSpecialValue(value), 'EQUALS'];
     }
 
-    // Parse even-line colon style: key:value or key:"value"
-    const colonMatch = line.match(/^(.+?):(.+)$/);
-    if (colonMatch && !colonMatch[2].includes(':')) {
-      const rawValue = colonMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [colonMatch[1], quotedValueMatch[1], 'COLON'];
-      }
-      const value = this.parseSpecialValue(rawValue);
-      const numValue = parseFloat(String(value));
-      return [colonMatch[1], isNaN(numValue) ? value : numValue, 'COLON'];
+    // Check for single bracket pattern: key<value>
+    const bracketMatch = line.match(/^(.+?)<(.+)>$/);
+    if (bracketMatch) {
+      return {
+        style: 'BRACKETS',
+        keyPart: bracketMatch[1],
+        valuePart: bracketMatch[2],
+      };
     }
 
-    // Parse even-line tilde style: key~value or key~"value"
-    const tildeMatch = line.match(/^(.+?)~(.+)$/);
-    if (tildeMatch) {
-      const rawValue = tildeMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [tildeMatch[1], quotedValueMatch[1], 'TILDE'];
+    // Define separator patterns in order of precedence
+    const separators = [
+      { char: '=', style: 'EQUALS' },
+      { char: ':', style: 'COLON' },
+      { char: '~', style: 'TILDE' },
+      { char: '#', style: 'HASH' },
+      { char: '%', style: 'PERCENT' },
+      { char: '$', style: 'DOLLAR' },
+      { char: '^', style: 'CARET' },
+      { char: '+', style: 'PLUS' },
+    ];
+
+    // Find the earliest separator outside quoted sections
+    let earliestPos = -1;
+    let earliestStyle = '';
+
+    for (const { char, style } of separators) {
+      if (char === '=' && quotedMatch) continue; // Already handled above
+
+      const separatorPos = this.findSeparatorOutsideQuotes(line, char);
+      if (separatorPos !== -1) {
+        // Special handling for colon to avoid colon arrays
+        if (char === ':' && this.isColonArray(line, separatorPos)) {
+          continue;
+        }
+
+        // Keep track of the earliest valid separator
+        if (earliestPos === -1 || separatorPos < earliestPos) {
+          earliestPos = separatorPos;
+          earliestStyle = style;
+        }
       }
-      const value = this.parseSpecialValue(rawValue);
-      return [tildeMatch[1], value, 'TILDE'];
     }
 
-    // Parse even-line hash style: key#value or key#"value"
-    const hashMatch = line.match(/^(.+?)#(.+)$/);
-    if (hashMatch) {
-      const rawValue = hashMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [hashMatch[1], quotedValueMatch[1], 'HASH'];
-      }
-      const value = this.parseSpecialValue(rawValue);
-      return [hashMatch[1], value, 'HASH'];
+    // Return the earliest valid separator found
+    if (earliestPos !== -1) {
+      return {
+        style: earliestStyle,
+        keyPart: line.slice(0, earliestPos),
+        valuePart: line.slice(earliestPos + 1),
+      };
     }
 
-    // Parse even-line percent style: key%value or key%"value"
-    const percentMatch = line.match(/^(.+?)%(.+)$/);
-    if (percentMatch) {
-      const rawValue = percentMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [percentMatch[1], quotedValueMatch[1], 'PERCENT'];
+    return null;
+  }
+
+  /**
+   * Find position of separator character outside quoted sections
+   */
+  private findSeparatorOutsideQuotes(line: string, separator: string): number {
+    let inQuotes = false;
+    let escapeNext = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
       }
-      const value = this.parseSpecialValue(rawValue);
-      return [percentMatch[1], value, 'PERCENT'];
+
+      if (char === '\\') {
+        escapeNext = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+
+      if (!inQuotes && char === separator) {
+        return i;
+      }
     }
 
-    // Parse even-line dollar style: key$value or key$"value"
-    const dollarMatch = line.match(/^(.+?)\$(.+)$/);
-    if (dollarMatch) {
-      const rawValue = dollarMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [dollarMatch[1], quotedValueMatch[1], 'DOLLAR'];
-      }
-      const value = this.parseSpecialValue(rawValue);
-      return [dollarMatch[1], value, 'DOLLAR'];
+    return -1;
+  }
+
+  /**
+   * Check if this colon is part of a colon-delimited array
+   */
+  private isColonArray(line: string, firstColonPos: number): boolean {
+    const afterFirstColon = line.slice(firstColonPos + 1);
+    return afterFirstColon.includes(':');
+  }
+
+  /**
+   * Parse value according to the identified style
+   */
+  private parseValueForStyle(
+    key: string,
+    valuePart: string,
+    style: string
+  ): [string, unknown, string] {
+    // QUOTED style: always preserve as string (quotes already stripped by analyzeLineStructure)
+    if (style === 'QUOTED') {
+      return [key, unescapeStringValue(valuePart), style];
     }
 
-    // Parse even-line caret style: key^value or key^"value"
-    const caretMatch = line.match(/^(.+?)\^(.+)$/);
-    if (caretMatch) {
-      const rawValue = caretMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [caretMatch[1], quotedValueMatch[1], 'CARET'];
-      }
-      const value = this.parseSpecialValue(rawValue);
-      return [caretMatch[1], value, 'CARET'];
+    // Handle quoted values in other styles
+    const quotedValueMatch = valuePart.match(/^"(.*)"$/);
+    if (quotedValueMatch) {
+      return [key, unescapeStringValue(quotedValueMatch[1]), style];
     }
 
-    // Parse even-line plus style: key+value or key+"value"
-    const plusMatch = line.match(/^(.+?)\+(.+)$/);
-    if (plusMatch) {
-      const rawValue = plusMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [plusMatch[1], quotedValueMatch[1], 'PLUS'];
-      }
-      const value = this.parseSpecialValue(rawValue);
-      return [plusMatch[1], value, 'PLUS'];
+    // Handle special values for EQUALS style
+    if (style === 'EQUALS') {
+      if (valuePart === 'yes') return [key, true, style];
+      if (valuePart === 'no') return [key, false, style];
+      if (valuePart === '') return [key, '', style];
     }
 
-    // Parse ampersand style: &key&value or &key&"value"
-    const ampersandMatch = line.match(/^&(.+?)&(.+)$/);
-    if (ampersandMatch) {
-      const rawValue = ampersandMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [ampersandMatch[1], quotedValueMatch[1], 'AMPERSAND'];
+    // Handle numeric conversion for specific styles
+    if (style === 'COLON' || style === 'AMPERSAND') {
+      const numValue = parseFloat(valuePart);
+      if (!isNaN(numValue) && isFinite(numValue) && String(numValue) === valuePart) {
+        return [key, numValue, style];
       }
-      const value = this.parseSpecialValue(rawValue);
-      const numValue = parseFloat(String(value));
-      return [ampersandMatch[1], isNaN(numValue) ? value : numValue, 'AMPERSAND'];
+    }
+
+    // Default to parsing as special value
+    return [key, this.parseSpecialValue(valuePart), style];
+  }
+
+  /**
+   * Handle special cases that need custom parsing logic
+   * Only complex patterns that can't be handled by simple separator analysis
+   */
+  private parseSpecialCases(
+    line: string,
+    extractKey: (keyPart: string) => string
+  ): [string, unknown, string] | null {
+    // Parse double colon style: ::key::value::
+    if (line.startsWith('::') && line.endsWith('::')) {
+      const content = line.slice(2, -2);
+      // Find the :: separator within the content
+      const separatorIndex = content.indexOf('::');
+      if (separatorIndex !== -1) {
+        const keyPart = content.slice(0, separatorIndex);
+        const valuePart = content.slice(separatorIndex + 2); // +2 to skip both colons
+        const key = extractKey(keyPart);
+
+        // Check if value is quoted
+        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        if (quotedValueMatch) {
+          return [key, unescapeStringValue(quotedValueMatch[1]), 'DOUBLE_COLON'];
+        }
+        return [key, this.parseSpecialValue(valuePart), 'DOUBLE_COLON'];
+      }
+    }
+
+    // Parse fake comment style: //key//value
+    if (line.startsWith('//')) {
+      const content = line.slice(2);
+      const separatorPos = this.findSeparatorOutsideQuotes(content, '/');
+      if (separatorPos !== -1 && content.slice(separatorPos).startsWith('//')) {
+        const keyPart = content.slice(0, separatorPos);
+        const valuePart = content.slice(separatorPos + 2);
+        const key = extractKey(keyPart);
+
+        const quotedValueMatch = valuePart.match(/^"(.*)"$/);
+        if (quotedValueMatch) {
+          return [key, unescapeStringValue(quotedValueMatch[1]), 'FAKE_COMMENT'];
+        }
+        return [key, this.parseSpecialValue(valuePart), 'FAKE_COMMENT'];
+      }
+    }
+
+    // Parse at sandwich style: @key@value@
+    if (line.startsWith('@') && line.endsWith('@')) {
+      const content = line.slice(1, -1);
+      const separatorPos = this.findSeparatorOutsideQuotes(content, '@');
+      if (separatorPos !== -1) {
+        const keyPart = content.slice(0, separatorPos);
+        const valuePart = content.slice(separatorPos + 1);
+        const key = extractKey(keyPart);
+
+        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        if (quotedValueMatch) {
+          return [key, unescapeStringValue(quotedValueMatch[1]), 'AT_SANDWICH'];
+        }
+        return [key, this.parseSpecialValue(valuePart), 'AT_SANDWICH'];
+      }
+    }
+
+    // Parse underscore style: _key_value_
+    if (line.startsWith('_') && line.endsWith('_')) {
+      const content = line.slice(1, -1);
+      const separatorPos = this.findSeparatorOutsideQuotes(content, '_');
+      if (separatorPos !== -1) {
+        const keyPart = content.slice(0, separatorPos);
+        const valuePart = content.slice(separatorPos + 1);
+        const key = extractKey(keyPart);
+
+        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        if (quotedValueMatch) {
+          return [key, unescapeStringValue(quotedValueMatch[1]), 'UNDERSCORE'];
+        }
+        return [key, this.parseSpecialValue(valuePart), 'UNDERSCORE'];
+      }
     }
 
     // Parse multiple brackets (arrays): key<item1><item2>
     const multiBracketMatch = line.match(/^(.+?)(<.+>)+$/);
     if (multiBracketMatch && line.includes('><')) {
-      const key = multiBracketMatch[1];
-      const items = [...line.matchAll(/<([^>]+)>/g)].map((match) => {
-        const itemValue = match[1];
-        // Check if item is quoted
-        const quotedMatch = itemValue.match(/^"(.+)"$/);
-        if (quotedMatch) {
-          // Preserve quoted values as strings
-          return quotedMatch[1];
-        }
-        return this.parseSpecialValue(itemValue);
-      });
+      const key = extractKey(multiBracketMatch[1]);
+      const items = [...line.matchAll(/<([^>]*)>/g)]
+        .map((match) => match[1])
+        .filter((itemValue) => itemValue !== '') // Filter out empty brackets
+        .map((itemValue) => {
+          // Check if item is quoted
+          const quotedMatch = itemValue.match(/^"(.+)"$/);
+          if (quotedMatch) {
+            // Preserve quoted values as strings and unescape
+            return unescapeStringValue(quotedMatch[1]);
+          }
+          return this.parseSpecialValue(itemValue);
+        });
       return [key, items, 'BRACKETS'];
     }
 
     // Parse single bracket style: key<value>
     const bracketMatch = line.match(/^(.+?)<(.+)>$/);
     if (bracketMatch) {
+      const key = extractKey(bracketMatch[1]);
       const value = this.parseSpecialValue(bracketMatch[2]);
-      if (value === 'true') return [bracketMatch[1], true, 'BRACKETS'];
-      if (value === 'false') return [bracketMatch[1], false, 'BRACKETS'];
-      return [bracketMatch[1], value, 'BRACKETS'];
+      if (value === 'true') return [key, true, 'BRACKETS'];
+      if (value === 'false') return [key, false, 'BRACKETS'];
+      return [key, value, 'BRACKETS'];
     }
 
-    // Parse pipe arrays: key||item1||item2||
-    const pipeArrayMatch = line.match(/^(.+?)\|\|(.+)\|\|$/);
+    // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
+    const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)|\|$/);
     if (pipeArrayMatch) {
       const key = pipeArrayMatch[1];
       const value = pipeArrayMatch[2];
@@ -368,19 +515,30 @@ export class RomlLexer {
             // Check if item is quoted
             const quotedMatch = item.match(/^"(.+)"$/);
             if (quotedMatch) {
-              // Preserve quoted values as strings
-              return quotedMatch[1];
+              // Preserve quoted values as strings and unescape
+              return unescapeStringValue(quotedMatch[1]);
             }
             return this.parseSpecialValue(item);
           });
         return [key, items, 'PIPES'];
       } else {
+        // Handle empty array case: key||||
+        if (value === '') {
+          return [key, [], 'PIPES'];
+        }
+
         // Check if single value is quoted
         const quotedMatch = value.match(/^"(.+)"$/);
-        if (quotedMatch) {
-          return [key, quotedMatch[1], 'PIPES'];
+        const singleValue = quotedMatch
+          ? unescapeStringValue(quotedMatch[1])
+          : this.parseSpecialValue(value);
+
+        // For wrapper keys, single values should still be arrays
+        if (key === '_items' || key === '_value') {
+          return [key, [singleValue], 'PIPES'];
         }
-        return [key, this.parseSpecialValue(value), 'PIPES'];
+
+        return [key, singleValue, 'PIPES'];
       }
     }
 
@@ -434,73 +592,19 @@ export class RomlLexer {
     if (colonArrayMatch && colonArrayMatch[2].includes(':')) {
       const key = colonArrayMatch[1];
       const items = colonArrayMatch[2].split(':').map((item) => {
-        // Check if item is quoted
-        const quotedMatch = item.match(/^"(.+)"$/);
+        // Check if item is quoted (can be empty)
+        const quotedMatch = item.match(/^"(.*)"$/);
         if (quotedMatch) {
-          // Preserve quoted values as strings
-          return quotedMatch[1];
+          // Preserve quoted values as strings and unescape
+          return unescapeStringValue(quotedMatch[1]);
         }
         return this.parseSpecialValue(item);
       });
       return [key, items, 'COLON_DELIM'];
     }
 
-    // Parse double colon style: ::key::value:: or ::key::"value"::
-    const doubleColonMatch = line.match(/^::(.+?)::(.+)::$/);
-    if (doubleColonMatch) {
-      const rawValue = doubleColonMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [doubleColonMatch[1], quotedValueMatch[1], 'DOUBLE_COLON'];
-      }
-      return [doubleColonMatch[1], this.parseSpecialValue(rawValue), 'DOUBLE_COLON'];
-    }
-
-    // Parse fake comment style: //key//value or //key//"value"
-    const commentMatch = line.match(/^\/\/(.+?)\/\/(.*)$/);
-    if (commentMatch) {
-      const rawValue = commentMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [commentMatch[1], quotedValueMatch[1], 'FAKE_COMMENT'];
-      }
-      const parsedValue = this.parseSpecialValue(rawValue);
-      return [commentMatch[1], parsedValue, 'FAKE_COMMENT'];
-    }
-
-    // Parse at sandwich style: @key@value@ or @key@"value"@
-    const atMatch = line.match(/^@(.+?)@(.+)@$/);
-    if (atMatch) {
-      const rawValue = atMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [atMatch[1], quotedValueMatch[1], 'AT_SANDWICH'];
-      }
-      return [atMatch[1], this.parseSpecialValue(rawValue), 'AT_SANDWICH'];
-    }
-
-    // Parse underscore style: _key_value_ or _key_"value"_
-    const underscoreMatch = line.match(/^_(.+?)_(.+)_$/);
-    if (underscoreMatch) {
-      const rawValue = underscoreMatch[2];
-      // Check if value is quoted
-      const quotedValueMatch = rawValue.match(/^"(.+)"$/);
-      if (quotedValueMatch) {
-        // Preserve quoted values as strings
-        return [underscoreMatch[1], quotedValueMatch[1], 'UNDERSCORE'];
-      }
-      return [underscoreMatch[1], this.parseSpecialValue(rawValue), 'UNDERSCORE'];
-    }
-
     return null;
   }
-
   private parseSpecialValue(value: string): unknown {
     if (value === '__NULL__') return null;
     if (value === '__EMPTY__') return '';
