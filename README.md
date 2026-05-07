@@ -123,6 +123,12 @@ The same JSON structure always produces identical ROML output. The alternating p
 - **Null values**: `__NULL__`
 - **Empty strings**: `__EMPTY__`
 - **Whitespace**: Preserved exactly as-is
+- **Non-finite numbers** (`NaN`, `Infinity`, `-Infinity`): Coerced to `null` on encode, matching `JSON.stringify` behaviour
+
+### Parser Strictness
+
+- The `~ROML~` header is mandatory. Decoding input that doesn't begin with `~ROML~` (after blank lines) throws a parse error rather than returning `{}`.
+- Top-level non-object roots (arrays, primitives) are wrapped using the synthetic keys `__roml_items__` / `__roml_value__`. These names are not part of the public format and may change; do not depend on them in hand-written ROML.
 
 ### Prime Number Handling
 

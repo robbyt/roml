@@ -36,7 +36,8 @@ describe('Prime Number META Tag Validation', () => {
 
     it('should fail when primes are present but META tag is missing', () => {
       // Manually create ROML with prime prefixes but no META tag
-      const romlWithoutMeta = `!count="7"
+      const romlWithoutMeta = `~ROML~
+!count="7"
 !value="13"
 nested{
   !prime="17"
@@ -103,7 +104,8 @@ value="8"`;
 
   describe('Error messages', () => {
     it('should provide line numbers in error messages', () => {
-      const romlWithErrors = `!first="4"
+      const romlWithErrors = `~ROML~
+!first="4"
 !second="5"
 !third="6"`;
 
@@ -194,7 +196,8 @@ value="8"`;
 
   describe('Manual ROML editing scenarios', () => {
     it('should provide helpful error when user forgets META tag', () => {
-      const manualRoml = `!myPrime="7"
+      const manualRoml = `~ROML~
+!myPrime="7"
 regular="value"`;
 
       const lexer = new RomlLexer(manualRoml);
