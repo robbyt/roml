@@ -353,15 +353,26 @@ export class RomlParser {
 
   private objectNodeToData(node: RomlObjectNode): Record<string, any> {
     const result: Record<string, any> = {};
+    const seen = new Set<string>();
+    const recordKey = (key: string, lineNumber: number) => {
+      if (seen.has(key)) {
+        this.errors.push(`Duplicate key "${key}" at line ${lineNumber + 1}`);
+      } else {
+        seen.add(key);
+      }
+    };
 
     for (const prop of node.properties) {
+      recordKey(prop.key, prop.lineNumber);
       result[prop.key] = prop.value;
     }
 
     for (const child of node.children) {
       if (child.type === 'object') {
+        recordKey(child.key!, child.lineNumber);
         result[child.key!] = this.objectNodeToData(child);
       } else if (child.type === 'array') {
+        recordKey(child.key, child.lineNumber);
         result[child.key] = this.arrayNodeToData(child);
       }
     }
