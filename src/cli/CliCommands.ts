@@ -19,6 +19,15 @@ export class CliCommands {
   ) {}
 
   async executeCommand(command: string, input?: string): Promise<CliResult> {
+    // Validate the command before touching stdin so unknown commands
+    // surface the right diagnostic instead of a misleading
+    // "no input provided" error when there's nothing on stdin either.
+    if (command !== 'encode' && command !== 'decode' && command !== 'validate') {
+      this.errorWriter(`Error: Unknown command '${command}'`);
+      this.errorWriter('Use "roml help" for usage information');
+      return { output: '', exitCode: 1 };
+    }
+
     try {
       const inputData = input !== undefined ? input : await this.stdinReader.readStdin();
 
@@ -33,13 +42,11 @@ export class CliCommands {
           return await this.handleEncode(inputData);
         case 'decode':
           return await this.handleDecode(inputData);
-        default: {
-          const errorMsg = `Error: Unknown command '${command}'`;
-          this.errorWriter(errorMsg);
-          this.errorWriter('Use "roml help" for usage information');
-          return { output: '', exitCode: 1 };
-        }
+        case 'validate':
+          return await this.handleValidate(inputData);
       }
+      // Unreachable: the command was validated above.
+      return { output: '', exitCode: 1 };
     } catch (error) {
       const errorMsg = 'Error reading from stdin';
       this.errorWriter(errorMsg);
@@ -81,5 +88,20 @@ export class CliCommands {
       }
       return { output: '', exitCode: 1 };
     }
+  }
+
+  private async handleValidate(input: string): Promise<CliResult> {
+    const file = new RomlFile(input);
+    const result = file.validate();
+    if (result.valid) {
+      const msg = 'Valid ROML document';
+      this.outputWriter(msg);
+      return { output: msg, exitCode: 0 };
+    }
+    this.errorWriter('Error: Invalid ROML document');
+    for (const err of result.errors) {
+      this.errorWriter(err);
+    }
+    return { output: '', exitCode: 1 };
   }
 }
