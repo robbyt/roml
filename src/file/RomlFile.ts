@@ -47,39 +47,51 @@ export class RomlFile {
     try {
       // Use lexer → parser → AST pipeline
       const tokens = this.lexer.tokenize();
-      const parseResult = this.parser.parse(tokens);
-      return parseResult;
+      return this.parser.parse(tokens);
     } catch (error) {
-      // Create minimal AST for error case
-      const errorAST = {
-        type: 'document' as const,
+      return this.buildErrorResult(error);
+    }
+  }
+
+  /**
+   * Build a parse result for an unrecoverable lexer/parser error.
+   *
+   * The original error message is preserved verbatim in `errors[0]` so
+   * callers (and `toJSON`) can surface the underlying cause. `data` is
+   * `null` rather than the misleading `{}` so callers who skip the
+   * `errors.length === 0` check fail loudly instead of silently treating
+   * a broken document as a valid empty one. The AST and metadata are
+   * minimal placeholders to satisfy the `RomlParseResult` shape.
+   */
+  private buildErrorResult(error: unknown): RomlParseResult {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const emptyAST = {
+      type: 'document' as const,
+      startOffset: 0,
+      endOffset: 0,
+      lineNumber: 0,
+      depth: 0,
+      body: {
+        type: 'object' as const,
         startOffset: 0,
         endOffset: 0,
         lineNumber: 0,
         depth: 0,
-        body: {
-          type: 'object' as const,
-          startOffset: 0,
-          endOffset: 0,
-          lineNumber: 0,
-          depth: 0,
-          properties: [],
-          children: [],
-        },
-      };
-
-      return {
-        data: {},
-        metadata: {
-          checksum: 'error',
-          size: 0,
-          created: new Date().toISOString().split('T')[0],
-          source: 'json',
-        },
-        errors: [error instanceof Error ? error.message : 'Unknown error'],
-        ast: errorAST,
-      };
-    }
+        properties: [],
+        children: [],
+      },
+    };
+    return {
+      data: null,
+      metadata: {
+        checksum: 'error',
+        size: 0,
+        created: new Date().toISOString().split('T')[0],
+        source: 'json',
+      },
+      errors: [message],
+      ast: emptyAST,
+    };
   }
 
   public toJSON(): any {
