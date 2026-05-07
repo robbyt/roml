@@ -590,10 +590,17 @@ export class RomlConverter {
     // Alternating line behavior for different value types
     if (valueType === 'boolean') {
       if (isEvenLine) {
-        // Even lines: use equals notation with yes/no
+        // Even lines: use equals notation with yes/no. This handler
+        // bypasses `createSyntaxStyle` to render the literal `yes`/`no`
+        // without quoting, so it has to call `formatKeyName` itself —
+        // otherwise keys that need quoting (empty / whitespace /
+        // separator-char / `!`-prefix / `[N]`-shape) lose their
+        // quoting only when they land on an even-numbered line with
+        // a boolean value.
         return (key: string, value: unknown, features: LineFeatures) => {
           const prefix = features.containsPrime ? '!' : '';
-          return `${prefix}${key}=${value === true ? 'yes' : 'no'}`;
+          const formattedKey = formatKeyName(key, features.needsQuotedKey);
+          return `${prefix}${formattedKey}=${value === true ? 'yes' : 'no'}`;
         };
       } else {
         // Odd lines: use bracket notation
