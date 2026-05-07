@@ -179,27 +179,27 @@ export class RomlParser {
   private parseChildObject(token: RomlToken): RomlObjectNode | null {
     if (token.key === undefined) return null;
 
-    // Strip prime prefix from object key
-    let cleanKey = token.key;
-    if (token.key.startsWith('!')) {
+    // The lexer already stripped the prime prefix and surrounding
+    // quotes from `token.key`; just record whether a `!` was present
+    // so prime-validation can fire against the parent document.
+    if (token.keyHasPrimePrefix) {
       this.primesDetected = true;
-      cleanKey = token.key.substring(1);
     }
 
     this.advance();
-    const childObject = this.parseObject(cleanKey, (token.depth || 0) + 1);
+    const childObject = this.parseObject(token.key, (token.depth || 0) + 1);
     return childObject;
   }
 
   private parseChildArray(token: RomlToken): RomlArrayNode | null {
     if (token.key === undefined) return null;
 
-    // Strip prime prefix from array key
-    let cleanKey = token.key;
-    if (token.key.startsWith('!')) {
+    // The lexer already stripped the prime prefix and surrounding
+    // quotes from `token.key`; just record whether a `!` was present.
+    if (token.keyHasPrimePrefix) {
       this.primesDetected = true;
-      cleanKey = token.key.substring(1);
     }
+    const cleanKey = token.key;
 
     this.advance();
     const items: (RomlValueNode | RomlObjectNode | RomlArrayNode)[] = [];

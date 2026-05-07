@@ -203,16 +203,18 @@ export class RomlLexer {
       // Check for object start: key{
       const objectMatch = trimmedLine.match(/^(.+?)\{$/);
       if (objectMatch) {
-        const key = objectMatch[1];
+        const extracted = this.extractKey(objectMatch[1]);
         this.addToken(
           'OBJECT_START',
           trimmedLine,
           startOffset,
           lineNumber,
           undefined,
-          key,
+          extracted.key,
           undefined,
-          depth
+          depth,
+          extracted.wasQuoted,
+          extracted.hasPrimePrefix
         );
         i++;
         continue;
@@ -221,16 +223,18 @@ export class RomlLexer {
       // Check for array start: key[
       const arrayMatch = trimmedLine.match(/^(.+?)\[$/);
       if (arrayMatch) {
-        const key = arrayMatch[1];
+        const extracted = this.extractKey(arrayMatch[1]);
         this.addToken(
           'ARRAY_START',
           trimmedLine,
           startOffset,
           lineNumber,
           undefined,
-          key,
+          extracted.key,
           undefined,
-          depth
+          depth,
+          extracted.wasQuoted,
+          extracted.hasPrimePrefix
         );
         i++;
         continue;
@@ -259,34 +263,35 @@ export class RomlLexer {
     }
   }
 
+  /**
+   * Strip an optional leading `!` (prime marker) and surrounding double
+   * quotes from a raw key, returning the literal JSON key plus the
+   * structural metadata. Used by `parseKeyValueLine` for KEY_VALUE
+   * tokens and by `processLines` for OBJECT_START / ARRAY_START tokens
+   * so all token types surface clean keys with consistent flags.
+   */
+  private extractKey(keyPart: string): ExtractedKey {
+    let inner = keyPart;
+    let hasPrimePrefix = false;
+    if (inner.startsWith('!')) {
+      hasPrimePrefix = true;
+      inner = inner.substring(1);
+    }
+    const quotedKeyMatch = inner.match(/^"(.*)"$/);
+    if (quotedKeyMatch) {
+      return {
+        key: unescapeStringValue(quotedKeyMatch[1]),
+        wasQuoted: true,
+        hasPrimePrefix,
+      };
+    }
+    return { key: inner, wasQuoted: false, hasPrimePrefix };
+  }
+
   private parseKeyValueLine(
     line: string
   ): [string, unknown, string, boolean, boolean] | null {
-    // `extractKey` returns a structured result so each call site can
-    // explicitly thread the quoting / prime-prefix metadata into its
-    // own return tuple. Earlier iterations used closure side effects
-    // ("most recent call wins"), which silently broke if a branch
-    // happened to call extractKey more than once.
-    const extractKey = (keyPart: string): ExtractedKey => {
-      let inner = keyPart;
-      let hasPrimePrefix = false;
-      if (inner.startsWith('!')) {
-        hasPrimePrefix = true;
-        inner = inner.substring(1);
-      }
-      const quotedKeyMatch = inner.match(/^"(.*)"$/);
-      if (quotedKeyMatch) {
-        return {
-          key: unescapeStringValue(quotedKeyMatch[1]),
-          wasQuoted: true,
-          hasPrimePrefix,
-        };
-      }
-      // Unquoted: `inner` is the post-prefix key when there was a `!`,
-      // or the original `keyPart` otherwise. Either way, the leading
-      // prime marker (if any) has already been stripped here.
-      return { key: inner, wasQuoted: false, hasPrimePrefix };
-    };
+    const extractKey = (keyPart: string): ExtractedKey => this.extractKey(keyPart);
 
     // Check special cases FIRST before simple separator analysis
     // This prevents complex patterns from being incorrectly split by analyzeLineStructure

@@ -368,6 +368,11 @@ export class RomlConverter {
       // Analyze if this array contains primes
       const lineFeatures = this.analyzeLineFeatures(key, array, context);
       const prefix = lineFeatures.containsPrime ? '!' : '';
+      // Quote the key if needed so the lexer can recover it cleanly.
+      // Without this, e.g. an empty-string key with an array value
+      // emits a bare `[` which the lexer's `arrayMatch` regex
+      // (`^(.+?)\[$`) cannot capture, and the line is silently dropped.
+      const formattedKey = formatKeyName(key, lineFeatures.needsQuotedKey);
 
       const newContext: ConversionContext = {
         ...context,
@@ -381,9 +386,26 @@ export class RomlConverter {
         const itemContext = { ...newContext, lineNumber: currentLineNumber };
 
         if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
-          const converted = this.convertObject(`[${index}]`, item, itemContext);
-          arrayItems.push(converted.result);
-          currentLineNumber = converted.nextLineNumber;
+          // Emit the structural `[index]{...}` opener directly rather
+          // than routing the `[N]` key through `convertObject`'s
+          // with-key branch. That branch (correctly) calls
+          // `formatKeyName`, which would quote `[0]` because
+          // `needsQuotedKey` flags any `[...]`-shaped key — but the
+          // lexer's `arrayItemMatch` regex only matches the unquoted
+          // form. The user's own `{"[0]": x}` keys still go through
+          // `convertObject` with-key and get quoted; only the
+          // structural use here bypasses formatting.
+          const itemIndent = '  '.repeat(itemContext.depth);
+          const bodyContext: ConversionContext = {
+            ...itemContext,
+            depth: itemContext.depth + 1,
+            lineNumber: currentLineNumber + 1,
+          };
+          const body = this.convertObject(item, bodyContext);
+          arrayItems.push(
+            `${itemIndent}[${index}]{\n${body.result}\n${itemIndent}}`
+          );
+          currentLineNumber = body.nextLineNumber + 1;
         } else {
           const converted = this.convertValue(`[${index}]`, item, itemContext);
           arrayItems.push(converted.result);
@@ -392,7 +414,7 @@ export class RomlConverter {
       }
 
       return {
-        result: `${indent}${prefix}${key}[\n${arrayItems.join('\n')}\n${indent}]`,
+        result: `${indent}${prefix}${formattedKey}[\n${arrayItems.join('\n')}\n${indent}]`,
         nextLineNumber: currentLineNumber + 1,
       };
     }
@@ -401,6 +423,11 @@ export class RomlConverter {
     const arrayStyle = this.selectArrayStyle(key, context);
     const lineFeatures = this.analyzeLineFeatures(key, array, context);
     const prefix = lineFeatures.containsPrime ? '!' : '';
+    // Quote the key if needed so the lexer can recover it cleanly.
+    // Without this, e.g. an empty-string key with an empty array
+    // would emit `||||` (no key bytes at all) which the lexer's
+    // pipe-array regex can't capture.
+    const formattedKey = formatKeyName(key, lineFeatures.needsQuotedKey);
 
     switch (arrayStyle) {
       case 'PIPES':
@@ -417,7 +444,7 @@ export class RomlConverter {
           })
           .join('||');
         return {
-          result: `${indent}${prefix}${key}||${pipeItems}||`,
+          result: `${indent}${prefix}${formattedKey}||${pipeItems}||`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -439,7 +466,7 @@ export class RomlConverter {
         const finalBracketItems = array.length === 1 ? `${bracketItems}<>` : bracketItems;
 
         return {
-          result: `${indent}${prefix}${key}${finalBracketItems}`,
+          result: `${indent}${prefix}${formattedKey}${finalBracketItems}`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -456,7 +483,7 @@ export class RomlConverter {
           return String(item);
         });
         return {
-          result: `${indent}${prefix}${key}[${jsonItems.join(',')}]`,
+          result: `${indent}${prefix}${formattedKey}[${jsonItems.join(',')}]`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -472,13 +499,13 @@ export class RomlConverter {
           return String(item);
         });
         return {
-          result: `${indent}${prefix}${key}:${colonItems.join(':')}`,
+          result: `${indent}${prefix}${formattedKey}:${colonItems.join(':')}`,
           nextLineNumber: context.lineNumber + 1,
         };
 
       default:
         return {
-          result: `${indent}${prefix}${key}||${array.join('||')}||`,
+          result: `${indent}${prefix}${formattedKey}||${array.join('||')}||`,
           nextLineNumber: context.lineNumber + 1,
         };
     }
@@ -498,6 +525,11 @@ export class RomlConverter {
       // For objects, don't add prefix to the object key itself
       // The prefix will be added to individual keys with prime values inside
       const prefix = '';
+      // Quote the key if needed so the lexer can recover it cleanly.
+      // Without this, an empty-string key emits a bare `{` which the
+      // lexer's `objectMatch` regex (`^(.+?)\{$`) cannot capture, and
+      // the line is silently dropped.
+      const formattedKey = formatKeyName(key, this.needsQuotedKey(key));
 
       const newContext: ConversionContext = {
         ...context,
@@ -515,7 +547,7 @@ export class RomlConverter {
       }
 
       return {
-        result: `${indent}${prefix}${key}{\n${entries.join('\n')}\n${indent}}`,
+        result: `${indent}${prefix}${formattedKey}{\n${entries.join('\n')}\n${indent}}`,
         nextLineNumber: currentLineNumber + 1,
       };
     } else {
