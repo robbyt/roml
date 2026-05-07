@@ -171,6 +171,15 @@ export class RomlConverter {
     // pipeline to handle the embedded quotes correctly.
     if (value.startsWith('"') || value.endsWith('"')) return true;
 
+    // Check if string ends with `{` or `[`. The lexer interprets any
+    // line ending in `{` as OBJECT_START and any line ending in `[`
+    // as ARRAY_START regardless of what came before, so a string
+    // value like `"{"` would emit (e.g.) `//key//{` and silently be
+    // reinterpreted as opening a child object. Routing through
+    // QUOTED produces `key="{"` which the lexer parses as a regular
+    // key/value.
+    if (value.endsWith('{') || value.endsWith('[')) return true;
+
     // Check if string contains newlines (would break single-line format)
     if (value.includes('\n') || value.includes('\r')) return true;
 
