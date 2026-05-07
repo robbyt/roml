@@ -47,7 +47,16 @@ export class RomlFile {
     try {
       // Use lexer → parser → AST pipeline
       const tokens = this.lexer.tokenize();
-      return this.parser.parse(tokens);
+      const result = this.parser.parse(tokens);
+      // Overwrite the parser's placeholder metadata with values that
+      // actually reflect the input we parsed. The parser doesn't see
+      // the raw bytes; RomlFile does.
+      result.metadata = {
+        ...result.metadata,
+        checksum: this.getChecksum(),
+        size: this.content.length,
+      };
+      return result;
     } catch (error) {
       return this.buildErrorResult(error);
     }
@@ -84,8 +93,11 @@ export class RomlFile {
     return {
       data: null,
       metadata: {
-        checksum: 'error',
-        size: 0,
+        // Real checksum / size of the input bytes, even on the error
+        // path. The parse failed, but the metadata is still an honest
+        // description of what was fed in.
+        checksum: this.getChecksum(),
+        size: this.content.length,
         created: new Date().toISOString().split('T')[0],
         source: 'json',
       },
