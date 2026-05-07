@@ -68,17 +68,25 @@ export class RomlLexer {
     // require it to begin with `~ROML~`; otherwise the input is not a
     // ROML document. Blank lines before the header are tolerated.
     let headerLineIndex = -1;
+    let headerTrimmed = '';
     for (let i = 0; i < this.lines.length; i++) {
-      if (this.lines[i].trim() !== '') {
+      const trimmed = this.lines[i].trim();
+      if (trimmed !== '') {
         headerLineIndex = i;
+        headerTrimmed = trimmed;
         break;
       }
     }
-    if (headerLineIndex === -1 || !this.lines[headerLineIndex].trim().startsWith('~ROML~')) {
+    if (headerLineIndex === -1 || !headerTrimmed.startsWith('~ROML~')) {
       throw new Error('Missing ~ROML~ header: input is not a ROML document');
     }
 
-    this.addToken('HEADER', this.lines[headerLineIndex].trim(), 0, headerLineIndex);
+    this.addToken(
+      'HEADER',
+      headerTrimmed,
+      this.getLineStartOffset(headerLineIndex),
+      headerLineIndex
+    );
 
     // Process content lines after the header.
     const contentStart = headerLineIndex + 1;
