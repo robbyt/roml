@@ -503,7 +503,7 @@ export class RomlLexer {
     }
 
     // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
-    const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)|\|$/);
+    const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)\|\|$/);
     if (pipeArrayMatch) {
       const key = pipeArrayMatch[1];
       const value = pipeArrayMatch[2];
