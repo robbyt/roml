@@ -147,6 +147,14 @@ export class RomlConverter {
     // Check if string is whitespace-only (could be confused with missing content)
     if (value.trim() === '') return true;
 
+    // Check if string starts or ends with a quote character. Non-QUOTED
+    // styles emit values verbatim, and the parser unwraps anything matching
+    // /^"(.*)"$/ as a quoted value, which would silently strip the leading
+    // and trailing quote bytes (or mangle the middle for `"a","b"`-style
+    // values). Routing these through QUOTED forces the existing escape
+    // pipeline to handle the embedded quotes correctly.
+    if (value.startsWith('"') || value.endsWith('"')) return true;
+
     // Check if string contains newlines (would break single-line format)
     if (value.includes('\n') || value.includes('\r')) return true;
 
