@@ -1,5 +1,5 @@
 import { RomlToken } from '../lexer/RomlLexer.js';
-import { MetaTags } from '../types.js';
+import { MetaTags, SYNTHETIC_ITEMS_KEY, SYNTHETIC_VALUE_KEY } from '../types.js';
 
 export interface RomlMetadata {
   checksum: string;
@@ -333,14 +333,18 @@ export class RomlParser {
   private unwrapSyntheticObject(data: Record<string, any>): any {
     const keys = Object.keys(data);
 
-    // Check for array wrapper: {"_items": [...]}
-    if (keys.length === 1 && keys[0] === '_items' && Array.isArray(data._items)) {
-      return data._items;
+    // Check for array wrapper: {"__roml_items__": [...]}
+    if (
+      keys.length === 1 &&
+      keys[0] === SYNTHETIC_ITEMS_KEY &&
+      Array.isArray(data[SYNTHETIC_ITEMS_KEY])
+    ) {
+      return data[SYNTHETIC_ITEMS_KEY];
     }
 
-    // Check for primitive wrapper: {"_value": ...}
-    if (keys.length === 1 && keys[0] === '_value') {
-      return data._value;
+    // Check for primitive wrapper: {"__roml_value__": ...}
+    if (keys.length === 1 && keys[0] === SYNTHETIC_VALUE_KEY) {
+      return data[SYNTHETIC_VALUE_KEY];
     }
 
     // Regular object - return as-is

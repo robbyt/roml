@@ -4,6 +4,8 @@ import {
   EMPTY_DOCUMENT_FEATURES,
   EMPTY_LINE_FEATURES,
   MetaTags,
+  SYNTHETIC_ITEMS_KEY,
+  SYNTHETIC_VALUE_KEY,
 } from './types.js';
 import { objectContainsPrimes, containsPrime } from './utils/primeUtils.js';
 
@@ -211,9 +213,9 @@ export class RomlConverter {
     let processData: Record<string, unknown>;
 
     if (inputType === 'array') {
-      processData = { _items: data };
+      processData = { [SYNTHETIC_ITEMS_KEY]: data };
     } else if (inputType === 'primitive') {
-      processData = { _value: data };
+      processData = { [SYNTHETIC_VALUE_KEY]: data };
     } else {
       processData = data as Record<string, unknown>;
     }
@@ -626,7 +628,7 @@ export class RomlConverter {
   }
 
   private isSyntheticWrapperKey(key: string): boolean {
-    return key === '_items' || key === '_value';
+    return key === SYNTHETIC_ITEMS_KEY || key === SYNTHETIC_VALUE_KEY;
   }
 
   /**
@@ -645,7 +647,7 @@ export class RomlConverter {
    */
   private objectContainsPrimesExcludingWrapperKeys(data: Record<string, unknown>): boolean {
     for (const [key, value] of Object.entries(data)) {
-      if (key === '_items' || key === '_value') {
+      if (key === SYNTHETIC_ITEMS_KEY || key === SYNTHETIC_VALUE_KEY) {
         // For wrapper keys, check items that would actually generate prime prefixes
         if (Array.isArray(value)) {
           // Check if this array uses structured format (which generates prefixes)
