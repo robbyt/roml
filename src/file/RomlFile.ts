@@ -47,7 +47,14 @@ export class RomlFile {
     try {
       // Use lexer → parser → AST pipeline
       const tokens = this.lexer.tokenize();
-      return this.parser.parse(tokens);
+      const result = this.parser.parse(tokens);
+      // The parser doesn't have access to the original input string,
+      // so its placeholder `checksum` is meaningless. Replace it with a
+      // real digest of the document. `size` is left at the parser's
+      // value (token count) to keep the public `RomlParser.parse()`
+      // and `RomlFile.parse()` shapes consistent.
+      result.metadata = { ...result.metadata, checksum: this.getChecksum() };
+      return result;
     } catch (error) {
       return this.buildErrorResult(error);
     }
@@ -84,7 +91,10 @@ export class RomlFile {
     return {
       data: null,
       metadata: {
-        checksum: 'error',
+        // Real digest of the input even on the error path. `size`
+        // stays at 0 because the parser never produced any tokens to
+        // count, matching `RomlParser.createMetadata()` semantics.
+        checksum: this.getChecksum(),
         size: 0,
         created: new Date().toISOString().split('T')[0],
         source: 'json',

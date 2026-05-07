@@ -58,23 +58,28 @@ function formatKeyName(key: string, needsQuoting: boolean): string {
 }
 
 /**
- * Helper function to create syntax style functions with consistent formatting
+ * Helper function to create syntax style functions with consistent formatting.
+ *
+ * `alwaysQuoteValue` forces the value to be wrapped in double quotes
+ * regardless of `features.needsQuotes`. The `QUOTED` style uses this to
+ * unconditionally render `key="value"`; other styles let the ambiguity
+ * detector decide.
  */
-function createSyntaxStyle(template: (key: string, value: string) => string) {
+function createSyntaxStyle(
+  template: (key: string, value: string) => string,
+  alwaysQuoteValue = false
+) {
   return (key: string, value: unknown, features: LineFeatures) => {
     const prefix = features.containsPrime ? '!' : '';
     const formattedKey = formatKeyName(key, features.needsQuotedKey);
-    const quotedValue = features.needsQuotes ? `"${escapeStringValue(value)}"` : value;
+    const needsQuotes = alwaysQuoteValue || features.needsQuotes;
+    const quotedValue = needsQuotes ? `"${escapeStringValue(value)}"` : value;
     return template(prefix + formattedKey, String(quotedValue));
   };
 }
 
 const SYNTAX_STYLES = {
-  QUOTED: (key: string, value: unknown, features: LineFeatures) => {
-    const prefix = features.containsPrime ? '!' : '';
-    const formattedKey = formatKeyName(key, features.needsQuotedKey);
-    return `${prefix}${formattedKey}="${escapeStringValue(value)}"`;
-  },
+  QUOTED: createSyntaxStyle((key, value) => `${key}=${value}`, true),
   AMPERSAND: createSyntaxStyle((key, value) => `&${key}&${value}`),
   BRACKETS: createSyntaxStyle((key, value) => `${key}<${value}>`),
   PIPES: createSyntaxStyle((key, value) => `||${key}||${value}||`),
