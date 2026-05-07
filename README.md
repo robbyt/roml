@@ -55,6 +55,7 @@ roml validate input.roml
 
 # Print the package version
 roml --version
+roml -v
 ```
 
 ### TypeScript API

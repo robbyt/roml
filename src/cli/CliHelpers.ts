@@ -23,14 +23,13 @@ export function showHelp(version?: string): string {
   const banner = version
     ? `ROML CLI v${version} - Robert's Opaque Mangling Language`
     : `ROML CLI - Robert's Opaque Mangling Language`;
-  return `
-${banner}
+  return `${banner}
 
 Usage:
   roml encode [FILE]    Convert JSON to ROML (reads FILE or stdin)
   roml decode [FILE]    Convert ROML to JSON (reads FILE or stdin)
   roml validate [FILE]  Validate a ROML document (reads FILE or stdin)
-  roml --version        Print the package version and exit
+  roml --version, -v    Print the package version and exit
   roml help             Show this help message
 
 Examples:

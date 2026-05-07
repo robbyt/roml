@@ -40,15 +40,23 @@ async function main() {
     process.exit(0);
   }
 
-  // Read input from a file when provided; otherwise CliCommands falls
-  // back to stdin via the StdinReader.
+  // Only treat the second positional arg as a file path for commands
+  // that actually accept input. For unknown commands, skip the file
+  // read so the user sees the proper "Unknown command" diagnostic
+  // instead of a misleading "Cannot read file" error.
+  const COMMANDS_TAKING_INPUT = new Set(['encode', 'decode', 'validate']);
+
   let input: string | undefined;
-  if (fileArg) {
+  if (fileArg && COMMANDS_TAKING_INPUT.has(command)) {
     try {
-      input = fs.readFileSync(fileArg, 'utf-8');
+      input = fs.readFileSync(fileArg, 'utf-8').trim();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Error: Cannot read file '${fileArg}': ${message}`);
+      process.exit(1);
+    }
+    if (!input) {
+      console.error(`Error: File '${fileArg}' is empty`);
       process.exit(1);
     }
   }

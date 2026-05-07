@@ -19,6 +19,15 @@ export class CliCommands {
   ) {}
 
   async executeCommand(command: string, input?: string): Promise<CliResult> {
+    // Validate the command before touching stdin so unknown commands
+    // surface the right diagnostic instead of a misleading
+    // "no input provided" error when there's nothing on stdin either.
+    if (command !== 'encode' && command !== 'decode' && command !== 'validate') {
+      this.errorWriter(`Error: Unknown command '${command}'`);
+      this.errorWriter('Use "roml help" for usage information');
+      return { output: '', exitCode: 1 };
+    }
+
     try {
       const inputData = input !== undefined ? input : await this.stdinReader.readStdin();
 
@@ -35,13 +44,9 @@ export class CliCommands {
           return await this.handleDecode(inputData);
         case 'validate':
           return await this.handleValidate(inputData);
-        default: {
-          const errorMsg = `Error: Unknown command '${command}'`;
-          this.errorWriter(errorMsg);
-          this.errorWriter('Use "roml help" for usage information');
-          return { output: '', exitCode: 1 };
-        }
       }
+      // Unreachable: the command was validated above.
+      return { output: '', exitCode: 1 };
     } catch (error) {
       const errorMsg = 'Error reading from stdin';
       this.errorWriter(errorMsg);

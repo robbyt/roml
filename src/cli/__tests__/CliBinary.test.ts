@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'fs';
+import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
@@ -9,6 +9,15 @@ import { join } from 'path';
 
 const cliPath = join(process.cwd(), 'dist', 'cli.js');
 const pkgPath = join(process.cwd(), 'package.json');
+
+beforeAll(() => {
+  if (!existsSync(cliPath)) {
+    throw new Error(
+      `CLI binary not found at ${cliPath}. ` +
+        `Run \`npm run build\` (or \`make build\`) before running these integration tests.`
+    );
+  }
+});
 
 function run(args: string[], input?: string) {
   return spawnSync('node', [cliPath, ...args], {
@@ -82,6 +91,26 @@ describe('CLI binary integration', () => {
       expect(result.status).toBe(1);
       expect(result.stderr).toMatch(/Cannot read file/);
     });
+
+    it('exits 1 with a clear empty-file error when the file is whitespace-only', () => {
+      const empty = join(tmpDir, 'empty.roml');
+      writeFileSync(empty, '   \n\n');
+
+      const result = run(['decode', empty]);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/empty/);
+    });
+
+    it('does not surface a file-read error for unknown commands', () => {
+      // `roml foo missing.txt` should diagnose the unknown command, not
+      // try to read missing.txt.
+      const result = run(['foo', join(tmpDir, 'missing.txt')]);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/Unknown command/);
+      expect(result.stderr).not.toMatch(/Cannot read file/);
+    });
   });
 
   describe('help', () => {
@@ -90,6 +119,12 @@ describe('CLI binary integration', () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toMatch(/validate/);
       expect(result.stdout).toMatch(/\[FILE\]/);
+    });
+
+    it('lists the -v alias alongside --version', () => {
+      const result = run(['help']);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toMatch(/--version.*-v/);
     });
   });
 });
