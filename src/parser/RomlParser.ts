@@ -280,11 +280,14 @@ export class RomlParser {
   private parseKeyValue(token: RomlToken): RomlKeyValueNode | null {
     if (token.key === undefined || token.parsedValue === undefined) return null;
 
-    // Check for prime prefixes and validate
-    let cleanKey = token.key;
-    if (token.key.startsWith('!')) {
+    // The lexer already strips any prime-marker `!` and surrounding
+    // quotes from `token.key`, surfacing the structural information via
+    // `token.keyHasPrimePrefix` and `token.keyWasQuoted`. So `token.key`
+    // is the literal JSON key name; we just decide whether to treat the
+    // line as a prime-prefixed line.
+    const cleanKey = token.key;
+    if (token.keyHasPrimePrefix) {
       this.primesDetected = true;
-      cleanKey = token.key.substring(1);
 
       // Validate that the value is actually prime (handle both numbers and numeric strings)
       let numericValue: number | null = null;
@@ -298,11 +301,16 @@ export class RomlParser {
       }
 
       if (numericValue !== null && !this.isPrime(numericValue)) {
+        // `cleanKey` is unescaped, so it can contain `"`, `\n`, control
+        // chars, etc. Use JSON.stringify to render an unambiguous,
+        // self-delimiting representation of the key including the `!`
+        // prime marker.
+        const displayKey = JSON.stringify('!' + cleanKey);
         this.invalidPrimeKeys.push(
-          `Line ${token.lineNumber + 1}: Key "${token.key}" has prime prefix but value ${numericValue} is not prime`
+          `Line ${token.lineNumber + 1}: Key ${displayKey} has prime prefix but value ${numericValue} is not prime`
         );
         this.errors.push(
-          `Invalid prime prefix at line ${token.lineNumber + 1}: Key "${token.key}" is marked as prime but value ${numericValue} is not a prime number`
+          `Invalid prime prefix at line ${token.lineNumber + 1}: Key ${displayKey} is marked as prime but value ${numericValue} is not a prime number`
         );
       }
     }

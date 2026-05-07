@@ -129,6 +129,7 @@ The same JSON structure always produces identical ROML output. The alternating p
 
 - The `~ROML~` header is mandatory. Decoding input that doesn't begin with `~ROML~` (after blank lines) throws a parse error rather than returning `{}`.
 - Duplicate keys at the same object scope are rejected. The same key name in different nested objects or different array items is fine; collisions in the same scope (root, the same `key{...}` block, or the same `[N]{...}` array item) throw a parse error naming the offending key and its line number.
+- JSON keys that actually start with `!` (e.g. `{"!warn": 1}`) round-trip cleanly: the encoder quotes them, and the lexer separates the optional prime-marker `!` from the literal key bytes structurally so neither is mistaken for the other.
 - Top-level non-object roots (arrays, primitives) are wrapped using the synthetic keys `__roml_items__` / `__roml_value__`. These names are not part of the public format and may change; do not depend on them in hand-written ROML.
 - `RomlFile.parse()` returns `{ data, errors, ... }`. On error, `data` is `null` (not `{}`) so callers who skip the `errors.length === 0` check fail loudly. `RomlFile.toJSON()` throws when `errors` is non-empty, with the original lexer/parser message embedded.
 
