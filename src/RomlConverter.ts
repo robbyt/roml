@@ -15,6 +15,17 @@ const VOWEL_START = /^[aeiouAEIOU]/;
 const ARRAY_NOTATION = /^\[.*\]$/;
 
 /**
+ * Coerce non-finite numbers (NaN, Infinity, -Infinity) to null. Matches
+ * JSON.stringify, which serialises all three as null. Without this
+ * coercion the encoder would emit the literal identifier (e.g. `NaN`)
+ * and the decoder would round-trip them as the string `"NaN"`.
+ */
+function coerceNonFiniteToNull(value: unknown): unknown {
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  return value;
+}
+
+/**
  * Escape special characters for ROML output
  */
 function escapeForRoml(value: string): string {
@@ -254,6 +265,7 @@ export class RomlConverter {
     value: any,
     context: ConversionContext
   ): { result: string; nextLineNumber: number } {
+    value = coerceNonFiniteToNull(value);
     const indent = '  '.repeat(context.depth);
     const lineFeatures = this.analyzeLineFeatures(key, value, context);
 
@@ -314,6 +326,7 @@ export class RomlConverter {
     array: any[],
     context: ConversionContext
   ): { result: string; nextLineNumber: number } {
+    array = array.map(coerceNonFiniteToNull);
     const indent = '  '.repeat(context.depth);
 
     const hasObjects = array.some(
