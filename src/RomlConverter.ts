@@ -171,6 +171,16 @@ export class RomlConverter {
     // pipeline to handle the embedded quotes correctly.
     if (value.startsWith('"') || value.endsWith('"')) return true;
 
+    // Check if string ends with `{` or `[` (after trimming trailing
+    // whitespace). The lexer trims every line before matching the
+    // OBJECT_START / ARRAY_START regexes, so a value like `'open { '`
+    // would still be mis-tokenized as `OBJECT_START` after lexer
+    // trimming even though the raw value doesn't end with `{`. Use
+    // `trimEnd()` so values with trailing whitespace before the
+    // structural char are also routed through `QUOTED`.
+    const trimmedEnd = value.trimEnd();
+    if (trimmedEnd.endsWith('{') || trimmedEnd.endsWith('[')) return true;
+
     // Check if string contains newlines (would break single-line format)
     if (value.includes('\n') || value.includes('\r')) return true;
 
