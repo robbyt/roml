@@ -38,18 +38,12 @@ describe('RomlMetadata.checksum is a real digest of the input', () => {
 
   it('also returns a real digest on the error path (missing header)', () => {
     // PR 7 made the error-path `data` null; the metadata still exists.
-    // The checksum should still be a real digest of the input bytes,
-    // not the literal string `'error'`.
+    // The checksum should be a real digest of the input string, not
+    // the literal placeholder `'error'`.
     const file = new RomlFile('not roml');
     const result = file.parse();
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.metadata.checksum).toMatch(/^[0-9a-f]{8}$/);
     expect(result.metadata.checksum).not.toBe('error');
-  });
-
-  it('size on the error path reflects the input length, not zero', () => {
-    const file = new RomlFile('not roml');
-    const result = file.parse();
-    expect(result.metadata.size).toBeGreaterThan(0);
   });
 });
