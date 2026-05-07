@@ -1,6 +1,18 @@
 import { SYNTHETIC_ITEMS_KEY, SYNTHETIC_VALUE_KEY } from '../types.js';
 
 /**
+ * Result of `extractKey`: the literal JSON key name plus structural
+ * metadata about how it was written in the source. The parser uses
+ * `hasPrimePrefix` to drive `primesDetected`; `wasQuoted` is currently
+ * informational only.
+ */
+interface ExtractedKey {
+  key: string;
+  wasQuoted: boolean;
+  hasPrimePrefix: boolean;
+}
+
+/**
  * Unescape string from ROML format - convert escape sequences back to actual characters
  */
 function unescapeStringValue(value: string): string {
@@ -51,9 +63,11 @@ export interface RomlToken {
   depth?: number;
   /**
    * True when the key in the source was wrapped in double quotes
-   * (e.g. `"!warn"=1`). The parser uses this to suppress the
-   * leading-`!` prime-prefix strip for keys whose actual JSON name
-   * starts with `!`.
+   * (e.g. `"!warn"=1`). The lexer strips the quotes from `key` itself;
+   * this flag is informational metadata for downstream tooling that
+   * wants to recover the source's quoting choice. The parser does not
+   * use it for prime-prefix disambiguation — `keyHasPrimePrefix` is
+   * already exclusive of the surrounding quotes.
    */
   keyWasQuoted?: boolean;
   /**
@@ -248,48 +262,54 @@ export class RomlLexer {
   private parseKeyValueLine(
     line: string
   ): [string, unknown, string, boolean, boolean] | null {
-    // `wasQuoted` and `hasPrimePrefix` are set as a side effect each time
-    // `extractKey` is called. The most recent values reflect the key
-    // chosen for the branch that returns. The parser uses them to
-    // distinguish a literal `!`-leading JSON key (quoted in source) from
-    // the prime-marker `!` (always outside the optional quotes).
-    let wasQuoted = false;
-    let hasPrimePrefix = false;
-    const extractKey = (keyPart: string): string => {
-      hasPrimePrefix = false;
-      wasQuoted = false;
+    // `extractKey` returns a structured result so each call site can
+    // explicitly thread the quoting / prime-prefix metadata into its
+    // own return tuple. Earlier iterations used closure side effects
+    // ("most recent call wins"), which silently broke if a branch
+    // happened to call extractKey more than once.
+    const extractKey = (keyPart: string): ExtractedKey => {
       let inner = keyPart;
+      let hasPrimePrefix = false;
       if (inner.startsWith('!')) {
         hasPrimePrefix = true;
         inner = inner.substring(1);
       }
       const quotedKeyMatch = inner.match(/^"(.*)"$/);
       if (quotedKeyMatch) {
-        wasQuoted = true;
-        return unescapeStringValue(quotedKeyMatch[1]);
+        return {
+          key: unescapeStringValue(quotedKeyMatch[1]),
+          wasQuoted: true,
+          hasPrimePrefix,
+        };
       }
       // Unquoted: `inner` is the post-prefix key when there was a `!`,
       // or the original `keyPart` otherwise. Either way, the leading
       // prime marker (if any) has already been stripped here.
-      return inner;
+      return { key: inner, wasQuoted: false, hasPrimePrefix };
     };
 
     // Check special cases FIRST before simple separator analysis
     // This prevents complex patterns from being incorrectly split by analyzeLineStructure
     const specialResult = this.parseSpecialCases(line, extractKey);
     if (specialResult) {
-      return [specialResult[0], specialResult[1], specialResult[2], wasQuoted, hasPrimePrefix];
+      return specialResult;
     }
 
     // Analyze line structure to identify style and key/value positions
     const analysis = this.analyzeLineStructure(line);
     if (analysis) {
       const { style, keyPart, valuePart } = analysis;
-      const key = extractKey(keyPart);
+      const extracted = extractKey(keyPart);
 
       // Parse the value based on the style
-      const valueResult = this.parseValueForStyle(key, valuePart, style);
-      return [valueResult[0], valueResult[1], valueResult[2], wasQuoted, hasPrimePrefix];
+      const valueResult = this.parseValueForStyle(extracted.key, valuePart, style);
+      return [
+        valueResult[0],
+        valueResult[1],
+        valueResult[2],
+        extracted.wasQuoted,
+        extracted.hasPrimePrefix,
+      ];
     }
 
     return null;
@@ -462,12 +482,17 @@ export class RomlLexer {
 
   /**
    * Handle special cases that need custom parsing logic
-   * Only complex patterns that can't be handled by simple separator analysis
+   * Only complex patterns that can't be handled by simple separator analysis.
+   *
+   * Each branch destructures the result of `extractKey` locally and threads
+   * the structural metadata (`wasQuoted`, `hasPrimePrefix`) into its return
+   * tuple. Earlier iterations relied on closure side effects in the caller,
+   * which would silently break if a branch ever called extractKey twice.
    */
   private parseSpecialCases(
     line: string,
-    extractKey: (keyPart: string) => string
-  ): [string, unknown, string] | null {
+    extractKey: (keyPart: string) => ExtractedKey
+  ): [string, unknown, string, boolean, boolean] | null {
     // Parse double colon style: ::key::value::
     if (line.startsWith('::') && line.endsWith('::')) {
       const content = line.slice(2, -2);
@@ -476,14 +501,26 @@ export class RomlLexer {
       if (separatorIndex !== -1) {
         const keyPart = content.slice(0, separatorIndex);
         const valuePart = content.slice(separatorIndex + 2); // +2 to skip both colons
-        const key = extractKey(keyPart);
+        const k = extractKey(keyPart);
 
         // Check if value is quoted
         const quotedValueMatch = valuePart.match(/^"(.+)"$/);
         if (quotedValueMatch) {
-          return [key, unescapeStringValue(quotedValueMatch[1]), 'DOUBLE_COLON'];
+          return [
+            k.key,
+            unescapeStringValue(quotedValueMatch[1]),
+            'DOUBLE_COLON',
+            k.wasQuoted,
+            k.hasPrimePrefix,
+          ];
         }
-        return [key, this.parseSpecialValue(valuePart), 'DOUBLE_COLON'];
+        return [
+          k.key,
+          this.parseSpecialValue(valuePart),
+          'DOUBLE_COLON',
+          k.wasQuoted,
+          k.hasPrimePrefix,
+        ];
       }
     }
 
@@ -494,13 +531,25 @@ export class RomlLexer {
       if (separatorPos !== -1 && content.slice(separatorPos).startsWith('//')) {
         const keyPart = content.slice(0, separatorPos);
         const valuePart = content.slice(separatorPos + 2);
-        const key = extractKey(keyPart);
+        const k = extractKey(keyPart);
 
         const quotedValueMatch = valuePart.match(/^"(.*)"$/);
         if (quotedValueMatch) {
-          return [key, unescapeStringValue(quotedValueMatch[1]), 'FAKE_COMMENT'];
+          return [
+            k.key,
+            unescapeStringValue(quotedValueMatch[1]),
+            'FAKE_COMMENT',
+            k.wasQuoted,
+            k.hasPrimePrefix,
+          ];
         }
-        return [key, this.parseSpecialValue(valuePart), 'FAKE_COMMENT'];
+        return [
+          k.key,
+          this.parseSpecialValue(valuePart),
+          'FAKE_COMMENT',
+          k.wasQuoted,
+          k.hasPrimePrefix,
+        ];
       }
     }
 
@@ -511,13 +560,25 @@ export class RomlLexer {
       if (separatorPos !== -1) {
         const keyPart = content.slice(0, separatorPos);
         const valuePart = content.slice(separatorPos + 1);
-        const key = extractKey(keyPart);
+        const k = extractKey(keyPart);
 
         const quotedValueMatch = valuePart.match(/^"(.+)"$/);
         if (quotedValueMatch) {
-          return [key, unescapeStringValue(quotedValueMatch[1]), 'AT_SANDWICH'];
+          return [
+            k.key,
+            unescapeStringValue(quotedValueMatch[1]),
+            'AT_SANDWICH',
+            k.wasQuoted,
+            k.hasPrimePrefix,
+          ];
         }
-        return [key, this.parseSpecialValue(valuePart), 'AT_SANDWICH'];
+        return [
+          k.key,
+          this.parseSpecialValue(valuePart),
+          'AT_SANDWICH',
+          k.wasQuoted,
+          k.hasPrimePrefix,
+        ];
       }
     }
 
@@ -528,20 +589,32 @@ export class RomlLexer {
       if (separatorPos !== -1) {
         const keyPart = content.slice(0, separatorPos);
         const valuePart = content.slice(separatorPos + 1);
-        const key = extractKey(keyPart);
+        const k = extractKey(keyPart);
 
         const quotedValueMatch = valuePart.match(/^"(.+)"$/);
         if (quotedValueMatch) {
-          return [key, unescapeStringValue(quotedValueMatch[1]), 'UNDERSCORE'];
+          return [
+            k.key,
+            unescapeStringValue(quotedValueMatch[1]),
+            'UNDERSCORE',
+            k.wasQuoted,
+            k.hasPrimePrefix,
+          ];
         }
-        return [key, this.parseSpecialValue(valuePart), 'UNDERSCORE'];
+        return [
+          k.key,
+          this.parseSpecialValue(valuePart),
+          'UNDERSCORE',
+          k.wasQuoted,
+          k.hasPrimePrefix,
+        ];
       }
     }
 
     // Parse multiple brackets (arrays): key<item1><item2>
     const multiBracketMatch = line.match(/^(.+?)(<.+>)+$/);
     if (multiBracketMatch && line.includes('><')) {
-      const key = extractKey(multiBracketMatch[1]);
+      const k = extractKey(multiBracketMatch[1]);
       const items = [...line.matchAll(/<([^>]*)>/g)]
         .map((match) => match[1])
         .filter((itemValue) => itemValue !== '') // Filter out empty brackets
@@ -554,23 +627,23 @@ export class RomlLexer {
           }
           return this.parseSpecialValue(itemValue);
         });
-      return [key, items, 'BRACKETS'];
+      return [k.key, items, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Parse single bracket style: key<value>
     const bracketMatch = line.match(/^(.+?)<(.+)>$/);
     if (bracketMatch) {
-      const key = extractKey(bracketMatch[1]);
+      const k = extractKey(bracketMatch[1]);
       const value = this.parseSpecialValue(bracketMatch[2]);
-      if (value === 'true') return [key, true, 'BRACKETS'];
-      if (value === 'false') return [key, false, 'BRACKETS'];
-      return [key, value, 'BRACKETS'];
+      if (value === 'true') return [k.key, true, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
+      if (value === 'false') return [k.key, false, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
+      return [k.key, value, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
     const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)\|\|$/);
     if (pipeArrayMatch) {
-      const key = extractKey(pipeArrayMatch[1]);
+      const k = extractKey(pipeArrayMatch[1]);
       const value = pipeArrayMatch[2];
       if (value.includes('||')) {
         const items = value
@@ -585,11 +658,11 @@ export class RomlLexer {
             }
             return this.parseSpecialValue(item);
           });
-        return [key, items, 'PIPES'];
+        return [k.key, items, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
       } else {
         // Handle empty array case: key||||
         if (value === '') {
-          return [key, [], 'PIPES'];
+          return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
         }
 
         // Check if single value is quoted
@@ -599,18 +672,18 @@ export class RomlLexer {
           : this.parseSpecialValue(value);
 
         // For wrapper keys, single values should still be arrays
-        if (key === SYNTHETIC_ITEMS_KEY || key === SYNTHETIC_VALUE_KEY) {
-          return [key, [singleValue], 'PIPES'];
+        if (k.key === SYNTHETIC_ITEMS_KEY || k.key === SYNTHETIC_VALUE_KEY) {
+          return [k.key, [singleValue], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
         }
 
-        return [key, singleValue, 'PIPES'];
+        return [k.key, singleValue, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
       }
     }
 
     // Parse JSON-style arrays: key["item1",7,"true",true]
     const jsonArrayMatch = line.match(/^(.+?)\[(.+)\]$/);
     if (jsonArrayMatch && jsonArrayMatch[2].includes(',')) {
-      const key = extractKey(jsonArrayMatch[1]);
+      const k = extractKey(jsonArrayMatch[1]);
       const arrayContent = jsonArrayMatch[2];
 
       // Parse JSON-style array items
@@ -649,13 +722,13 @@ export class RomlLexer {
         items.push(this.parseJsonValue(trimmed));
       }
 
-      return [key, items, 'JSON_STYLE'];
+      return [k.key, items, 'JSON_STYLE', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Parse colon-delimited arrays: key:item1:item2:item3
     const colonArrayMatch = line.match(/^(.+?):(.+)$/);
     if (colonArrayMatch && colonArrayMatch[2].includes(':')) {
-      const key = extractKey(colonArrayMatch[1]);
+      const k = extractKey(colonArrayMatch[1]);
       const items = colonArrayMatch[2].split(':').map((item) => {
         // Check if item is quoted (can be empty)
         const quotedMatch = item.match(/^"(.*)"$/);
@@ -665,7 +738,7 @@ export class RomlLexer {
         }
         return this.parseSpecialValue(item);
       });
-      return [key, items, 'COLON_DELIM'];
+      return [k.key, items, 'COLON_DELIM', k.wasQuoted, k.hasPrimePrefix];
     }
 
     return null;

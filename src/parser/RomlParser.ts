@@ -301,11 +301,16 @@ export class RomlParser {
       }
 
       if (numericValue !== null && !this.isPrime(numericValue)) {
+        // `cleanKey` is unescaped, so it can contain `"`, `\n`, control
+        // chars, etc. Use JSON.stringify to render an unambiguous,
+        // self-delimiting representation of the key including the `!`
+        // prime marker.
+        const displayKey = JSON.stringify('!' + cleanKey);
         this.invalidPrimeKeys.push(
-          `Line ${token.lineNumber + 1}: Key "!${cleanKey}" has prime prefix but value ${numericValue} is not prime`
+          `Line ${token.lineNumber + 1}: Key ${displayKey} has prime prefix but value ${numericValue} is not prime`
         );
         this.errors.push(
-          `Invalid prime prefix at line ${token.lineNumber + 1}: Key "!${cleanKey}" is marked as prime but value ${numericValue} is not a prime number`
+          `Invalid prime prefix at line ${token.lineNumber + 1}: Key ${displayKey} is marked as prime but value ${numericValue} is not a prime number`
         );
       }
     }
