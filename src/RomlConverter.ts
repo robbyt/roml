@@ -191,6 +191,12 @@ export class RomlConverter {
     // Check for keys that start with comment-like syntax
     if (key.startsWith('#') || key.startsWith('//')) return true;
 
+    // Quote keys starting with `!` so the parser doesn't mistake the
+    // leading byte for the prime-marker prefix. Without quoting,
+    // `{"!warn": 1}` would round-trip as `{"warn": 1}` because the
+    // parser strips a leading `!` from any key it encounters.
+    if (key.startsWith('!')) return true;
+
     // Check for whitespace that could break parsing
     if (key.includes(' ') || key.includes('\t') || key.includes('\n')) return true;
 

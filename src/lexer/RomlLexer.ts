@@ -49,6 +49,20 @@ export interface RomlToken {
   key?: string;
   parsedValue?: unknown;
   depth?: number;
+  /**
+   * True when the key in the source was wrapped in double quotes
+   * (e.g. `"!warn"=1`). The parser uses this to suppress the
+   * leading-`!` prime-prefix strip for keys whose actual JSON name
+   * starts with `!`.
+   */
+  keyWasQuoted?: boolean;
+  /**
+   * True when the source line carried a prime-marker `!` immediately
+   * before the (possibly-quoted) key, e.g. `!count:7` or `!"!warn":7`.
+   * The lexer strips the `!` so `key` is always the post-prefix name;
+   * the parser uses this flag to mark `primesDetected` and validate.
+   */
+  keyHasPrimePrefix?: boolean;
 }
 
 export class RomlLexer {
@@ -212,30 +226,59 @@ export class RomlLexer {
       const contentLine = line.trimStart();
       const parsed = this.parseKeyValueLine(contentLine);
       if (parsed) {
-        const [key, value, style] = parsed;
-        this.addToken('KEY_VALUE', contentLine, startOffset, lineNumber, style, key, value, depth);
+        const [key, value, style, keyWasQuoted, keyHasPrimePrefix] = parsed;
+        this.addToken(
+          'KEY_VALUE',
+          contentLine,
+          startOffset,
+          lineNumber,
+          style,
+          key,
+          value,
+          depth,
+          keyWasQuoted,
+          keyHasPrimePrefix
+        );
       }
 
       i++;
     }
   }
 
-  private parseKeyValueLine(line: string): [string, unknown, string] | null {
-    // Helper function to extract and unescape quoted keys
+  private parseKeyValueLine(
+    line: string
+  ): [string, unknown, string, boolean, boolean] | null {
+    // `wasQuoted` and `hasPrimePrefix` are set as a side effect each time
+    // `extractKey` is called. The most recent values reflect the key
+    // chosen for the branch that returns. The parser uses them to
+    // distinguish a literal `!`-leading JSON key (quoted in source) from
+    // the prime-marker `!` (always outside the optional quotes).
+    let wasQuoted = false;
+    let hasPrimePrefix = false;
     const extractKey = (keyPart: string): string => {
-      const quotedKeyMatch = keyPart.match(/^"(.*)"$/);
+      hasPrimePrefix = false;
+      wasQuoted = false;
+      let inner = keyPart;
+      if (inner.startsWith('!')) {
+        hasPrimePrefix = true;
+        inner = inner.substring(1);
+      }
+      const quotedKeyMatch = inner.match(/^"(.*)"$/);
       if (quotedKeyMatch) {
-        // Unescape all special characters in key names (same as unescapeStringValue)
+        wasQuoted = true;
         return unescapeStringValue(quotedKeyMatch[1]);
       }
-      return keyPart;
+      // Unquoted: `inner` is the post-prefix key when there was a `!`,
+      // or the original `keyPart` otherwise. Either way, the leading
+      // prime marker (if any) has already been stripped here.
+      return inner;
     };
 
     // Check special cases FIRST before simple separator analysis
     // This prevents complex patterns from being incorrectly split by analyzeLineStructure
     const specialResult = this.parseSpecialCases(line, extractKey);
     if (specialResult) {
-      return specialResult;
+      return [specialResult[0], specialResult[1], specialResult[2], wasQuoted, hasPrimePrefix];
     }
 
     // Analyze line structure to identify style and key/value positions
@@ -245,7 +288,8 @@ export class RomlLexer {
       const key = extractKey(keyPart);
 
       // Parse the value based on the style
-      return this.parseValueForStyle(key, valuePart, style);
+      const valueResult = this.parseValueForStyle(key, valuePart, style);
+      return [valueResult[0], valueResult[1], valueResult[2], wasQuoted, hasPrimePrefix];
     }
 
     return null;
@@ -526,7 +570,7 @@ export class RomlLexer {
     // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
     const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)\|\|$/);
     if (pipeArrayMatch) {
-      const key = pipeArrayMatch[1];
+      const key = extractKey(pipeArrayMatch[1]);
       const value = pipeArrayMatch[2];
       if (value.includes('||')) {
         const items = value
@@ -566,7 +610,7 @@ export class RomlLexer {
     // Parse JSON-style arrays: key["item1",7,"true",true]
     const jsonArrayMatch = line.match(/^(.+?)\[(.+)\]$/);
     if (jsonArrayMatch && jsonArrayMatch[2].includes(',')) {
-      const key = jsonArrayMatch[1];
+      const key = extractKey(jsonArrayMatch[1]);
       const arrayContent = jsonArrayMatch[2];
 
       // Parse JSON-style array items
@@ -611,7 +655,7 @@ export class RomlLexer {
     // Parse colon-delimited arrays: key:item1:item2:item3
     const colonArrayMatch = line.match(/^(.+?):(.+)$/);
     if (colonArrayMatch && colonArrayMatch[2].includes(':')) {
-      const key = colonArrayMatch[1];
+      const key = extractKey(colonArrayMatch[1]);
       const items = colonArrayMatch[2].split(':').map((item) => {
         // Check if item is quoted (can be empty)
         const quotedMatch = item.match(/^"(.*)"$/);
@@ -696,7 +740,9 @@ export class RomlLexer {
     style?: string,
     key?: string,
     parsedValue?: unknown,
-    depth?: number
+    depth?: number,
+    keyWasQuoted?: boolean,
+    keyHasPrimePrefix?: boolean
   ): void {
     this.tokens.push({
       type,
@@ -708,6 +754,8 @@ export class RomlLexer {
       key,
       parsedValue,
       depth,
+      keyWasQuoted,
+      keyHasPrimePrefix,
     });
   }
 }
