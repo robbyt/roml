@@ -48,4 +48,20 @@ describe('Strings ending in `{` or `[` (collision with OBJECT_START / ARRAY_STAR
   it('still preserves a string that has `{` in the middle (sanity)', () => {
     expect(roundTrip({ k: 'mid{dle' })).toEqual({ k: 'mid{dle' });
   });
+
+  // The lexer trims every line before matching its OBJECT_START /
+  // ARRAY_START patterns, so trailing whitespace doesn't save a value
+  // from being mis-tokenized. The encoder must use `trimEnd()` when
+  // checking for the structural-opener tail.
+  it('round-trips a value ending in `{ ` (trailing space)', () => {
+    expect(roundTrip({ k: 'open { ' })).toEqual({ k: 'open { ' });
+  });
+
+  it('round-trips a value ending in `[\\t` (trailing tab)', () => {
+    expect(roundTrip({ k: 'list [\t' })).toEqual({ k: 'list [\t' });
+  });
+
+  it('round-trips a value that is just `{   `', () => {
+    expect(roundTrip({ k: '{   ' })).toEqual({ k: '{   ' });
+  });
 });
