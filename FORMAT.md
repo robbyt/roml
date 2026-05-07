@@ -131,6 +131,9 @@ If no other rules apply, use a deterministic hash-based selection:
 - **whitespace**: Preserved exactly as-is
 - **booleans on odd lines**: `<true>` or `<false>`
 - **booleans on even lines**: `yes` or `no`
+- **NaN, Infinity, -Infinity**: Coerced to `null` on encode, matching
+  `JSON.stringify` behaviour. Round-trip is therefore lossy for non-finite
+  numbers (they become `null`), the same way it is for `JSON.stringify`.
 
 ## Array Encoding Rules
 
