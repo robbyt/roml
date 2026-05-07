@@ -19,24 +19,33 @@ export class ProcessStdinReader implements StdinReader {
   }
 }
 
-export function showHelp(): string {
+export function showHelp(version?: string): string {
+  const banner = version
+    ? `ROML CLI v${version} - Robert's Opaque Mangling Language`
+    : `ROML CLI - Robert's Opaque Mangling Language`;
   return `
-ROML CLI - Robert's Opaque Mangling Language
+${banner}
 
 Usage:
-  roml encode     Convert JSON from stdin to ROML on stdout
-  roml decode     Convert ROML from stdin to JSON on stdout
-  roml help       Show this help message
+  roml encode [FILE]    Convert JSON to ROML (reads FILE or stdin)
+  roml decode [FILE]    Convert ROML to JSON (reads FILE or stdin)
+  roml validate [FILE]  Validate a ROML document (reads FILE or stdin)
+  roml --version        Print the package version and exit
+  roml help             Show this help message
 
 Examples:
   echo '{"name":"Robert","age":30}' | roml encode
-  echo 'name="Robert"' | roml decode
-  cat data.json | roml encode > output.roml
-  cat input.roml | roml decode > output.json
+  roml encode data.json > output.roml
+  roml decode input.roml
+  roml validate input.roml
 `;
 }
 
 export function isHelpCommand(command?: string): boolean {
   if (!command) return true;
   return command === 'help' || command === '--help' || command === '-h';
+}
+
+export function isVersionFlag(command?: string): boolean {
+  return command === '--version' || command === '-v';
 }

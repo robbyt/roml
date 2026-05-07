@@ -41,15 +41,20 @@ npm install roml
 ### CLI Usage
 
 ```bash
-# Convert JSON to ROML
+# Convert JSON to ROML (from stdin or a file)
 echo '{"name":"Robert","age":30}' | roml encode
+roml encode data.json > output.roml
 
-# Convert ROML to JSON  
-echo 'name="Robert"' | roml decode
-
-# File conversion
-cat data.json | roml encode > output.roml
+# Convert ROML to JSON (from stdin or a file)
 cat input.roml | roml decode > output.json
+roml decode input.roml
+
+# Validate a ROML document — exit 0 if valid, exit 1 with errors if not
+cat input.roml | roml validate
+roml validate input.roml
+
+# Print the package version
+roml --version
 ```
 
 ### TypeScript API

@@ -33,6 +33,8 @@ export class CliCommands {
           return await this.handleEncode(inputData);
         case 'decode':
           return await this.handleDecode(inputData);
+        case 'validate':
+          return await this.handleValidate(inputData);
         default: {
           const errorMsg = `Error: Unknown command '${command}'`;
           this.errorWriter(errorMsg);
@@ -81,5 +83,20 @@ export class CliCommands {
       }
       return { output: '', exitCode: 1 };
     }
+  }
+
+  private async handleValidate(input: string): Promise<CliResult> {
+    const file = new RomlFile(input);
+    const result = file.validate();
+    if (result.valid) {
+      const msg = 'Valid ROML document';
+      this.outputWriter(msg);
+      return { output: msg, exitCode: 0 };
+    }
+    this.errorWriter('Error: Invalid ROML document');
+    for (const err of result.errors) {
+      this.errorWriter(err);
+    }
+    return { output: '', exitCode: 1 };
   }
 }
