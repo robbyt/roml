@@ -10,6 +10,15 @@ export enum MetaTags {
 }
 
 /**
+ * Synthetic wrapper key names used to encode top-level non-object roots
+ * (arrays, primitives) as if they were objects. These are intentionally
+ * unusual identifiers so they do not collide with realistic user keys; if
+ * a user really has these as root keys, round-trip is lossy by design.
+ */
+export const SYNTHETIC_ITEMS_KEY = '__roml_items__';
+export const SYNTHETIC_VALUE_KEY = '__roml_value__';
+
+/**
  * Document-level features detected during initial scan
  * These features determine META tags and document-wide behavior
  */

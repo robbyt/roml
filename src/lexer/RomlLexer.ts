@@ -1,3 +1,5 @@
+import { SYNTHETIC_ITEMS_KEY, SYNTHETIC_VALUE_KEY } from '../types.js';
+
 /**
  * Unescape string from ROML format - convert escape sequences back to actual characters
  */
@@ -534,7 +536,7 @@ export class RomlLexer {
           : this.parseSpecialValue(value);
 
         // For wrapper keys, single values should still be arrays
-        if (key === '_items' || key === '_value') {
+        if (key === SYNTHETIC_ITEMS_KEY || key === SYNTHETIC_VALUE_KEY) {
           return [key, [singleValue], 'PIPES'];
         }
 
