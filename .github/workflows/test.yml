@@ -39,7 +39,9 @@ jobs:
       - name: Test CLI functionality
         run: |
           echo '{"name":"Robert","age":30,"active":true}' | node dist/cli.js encode
-          echo 'name="Robert"' | node dist/cli.js decode
+          printf '~ROML~\nname="Robert"\n' | node dist/cli.js decode
+          # Round-trip test
+          echo '{"name":"Robert","age":30,"active":true}' | node dist/cli.js encode | node dist/cli.js decode
       
       - name: Test round-trip conversion with examples
         run: |
