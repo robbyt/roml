@@ -83,5 +83,25 @@ describe('Quote-aware lexer regexes', () => {
       const input = { items: ['a', 'b', 'c', 'd'] };
       expect(roundTrip(input)).toEqual(input);
     });
+
+    it('does not steal an EQUALS-style string value containing colons', () => {
+      // Surfaced by Copilot review on PR #27: the colon-array branch
+      // ran before the regular separator scan and didn't check for
+      // an earlier KEY_VALUE separator (`=`, `~`, etc.) outside
+      // quotes. So `y=a:b:c` (EQUALS string with colons in the
+      // value) would be misread as a 2-item colon-array. Now the
+      // colon-array branch only fires when no earlier separator
+      // outside quotes appears before the first `:`.
+      const input = { x: 0, y: 'a:b:c' };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('does not steal a TILDE-style string value containing colons', () => {
+      // `i` is vowel-starting → encoder uses TILDE on even line.
+      // The TILDE separator must take precedence over `:`s in the
+      // value.
+      const input = { x: 0, i: 'a:b:c' };
+      expect(roundTrip(input)).toEqual(input);
+    });
   });
 });

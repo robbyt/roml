@@ -174,12 +174,15 @@ describe('Round-trip property tests (fast-check)', () => {
  *  4. Empty arrays in BRACKETS / JSON_STYLE / COLON_DELIM styles —
  *     only PIPES emits a recoverable empty-array form; the other
  *     three reduce to a key-only line that the lexer drops.
- *  5. (Resolved — bracket parsing in both `analyzeLineStructure`
- *     and `parseSpecialCases` now uses `findSeparatorOutsideQuotes`
- *     to find the structural `<` outside any quoted-key region.)
+ *  5. (Resolved — single-bracket parsing now lives only in
+ *     `analyzeLineStructure`'s fallback path, runs after the regular
+ *     separator scan, and uses `findSeparatorOutsideQuotes` for the
+ *     `<` so a quoted-key with `<` inside isn't misread.)
  *  6. (Resolved — colon-array parsing in `parseSpecialCases` now
- *     uses `findSeparatorOutsideQuotes` for the first `:` so a
- *     quoted-key with `::` inside isn't misread as an array.)
+ *     uses `findSeparatorOutsideQuotes` for the first `:` and
+ *     refuses to fire when an earlier KEY_VALUE separator outside
+ *     quotes appears before that `:`, so EQUALS-style strings like
+ *     `y=a:b:c` aren't misread as arrays.)
  *  7. (Resolved — `selectSyntax` now requires `valueType === 'string'`
  *     before applying the semantic-category override; non-string
  *     values defer to the value-type branches.)

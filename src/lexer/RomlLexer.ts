@@ -741,20 +741,36 @@ export class RomlLexer {
     // (legitimate quoted-key containing colons) isn't misread as a
     // colon-array. The "this is an array, not a scalar" disambiguator
     // is unchanged: the value-part must contain at least one more `:`.
+    //
+    // Additionally, only fire when no earlier KEY_VALUE separator
+    // (`=`, `~`, `#`, `%`, `$`, `^`, `+`) appears outside quotes
+    // before the first `:`. Otherwise an EQUALS-style string value
+    // like `y=a:b:c` would be misread as a 2-item colon-array.
     const firstColonPos = this.findSeparatorOutsideQuotes(line, ':');
     const colonRemainder = firstColonPos !== -1 ? line.slice(firstColonPos + 1) : '';
     if (firstColonPos !== -1 && colonRemainder.includes(':')) {
-      const k = extractKey(line.slice(0, firstColonPos));
-      const items = colonRemainder.split(':').map((item) => {
-        // Check if item is quoted (can be empty)
-        const quotedMatch = item.match(/^"(.*)"$/);
-        if (quotedMatch) {
-          // Preserve quoted values as strings and unescape
-          return unescapeStringValue(quotedMatch[1]);
+      const earlierSeparators = ['=', '~', '#', '%', '$', '^', '+'];
+      let hasEarlierSeparator = false;
+      for (const sep of earlierSeparators) {
+        const sepPos = this.findSeparatorOutsideQuotes(line, sep);
+        if (sepPos !== -1 && sepPos < firstColonPos) {
+          hasEarlierSeparator = true;
+          break;
         }
-        return this.parseSpecialValue(item);
-      });
-      return [k.key, items, 'COLON_DELIM', k.wasQuoted, k.hasPrimePrefix];
+      }
+      if (!hasEarlierSeparator) {
+        const k = extractKey(line.slice(0, firstColonPos));
+        const items = colonRemainder.split(':').map((item) => {
+          // Check if item is quoted (can be empty)
+          const quotedMatch = item.match(/^"(.*)"$/);
+          if (quotedMatch) {
+            // Preserve quoted values as strings and unescape
+            return unescapeStringValue(quotedMatch[1]);
+          }
+          return this.parseSpecialValue(item);
+        });
+        return [k.key, items, 'COLON_DELIM', k.wasQuoted, k.hasPrimePrefix];
+      }
     }
 
     return null;
