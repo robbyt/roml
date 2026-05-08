@@ -45,7 +45,11 @@ describe('Type-aware syntax selection', () => {
       expect(roundTrip({ name: null })).toEqual({ name: null });
     });
 
-    it('round-trips `id: true` (TECHNICAL → AMPERSAND for non-string)', () => {
+    it('round-trips `id: true` (TECHNICAL semantic skipped for non-string; falls through to boolean branch)', () => {
+      // `id` is in the TECHNICAL category which would normally map
+      // to AMPERSAND, but the type-aware gate skips the override for
+      // non-strings so a boolean value goes through the boolean
+      // branch instead (BRACKETS on odd lines / `=yes|no` on even).
       expect(roundTrip({ id: true })).toEqual({ id: true });
     });
 

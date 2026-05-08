@@ -604,12 +604,13 @@ export class RomlConverter {
       }
     }
 
-    // Check semantic categories first (apply to both odd and even lines).
-    // Only apply for true string values — the override forces a style
-    // based on key name, but several semantic styles (notably PERSONAL
-    // → QUOTED) wrap the value in double quotes and would coerce
-    // non-strings (booleans, numbers) into string round-trips
-    // (limitation #7).
+    // Check semantic categories. The override applies only on odd
+    // lines (the alternating-style design reserves even lines for
+    // the value-type rules) and only for true string values — the
+    // override forces a style based on key name, but several semantic
+    // styles (notably PERSONAL → QUOTED) wrap the value in double
+    // quotes and would coerce non-strings (booleans, numbers) into
+    // string round-trips (limitation #7).
     const semanticStyle = this.getSemanticStyle(key);
     if (semanticStyle && !isEvenLine && valueType === 'string') {
       return SYNTAX_STYLES[semanticStyle];
