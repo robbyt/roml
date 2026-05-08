@@ -174,11 +174,15 @@ describe('Round-trip property tests (fast-check)', () => {
  *  4. Empty arrays in BRACKETS / JSON_STYLE / COLON_DELIM styles —
  *     only PIPES emits a recoverable empty-array form; the other
  *     three reduce to a key-only line that the lexer drops.
- *  5. Quoted-key + `<`-containing key + boolean value: the bracket
- *     regex is not quote-aware, splitting at the wrong `<`.
- *  6. Quoted-key + `:`-containing key in any KEY_VALUE form: the
- *     colon-array regex in `parseSpecialCases` is not quote-aware,
- *     causing `"::"=value` to be misread as a colon-delimited array.
+ *  5. (Resolved — single-bracket parsing now lives only in
+ *     `analyzeLineStructure`'s fallback path, runs after the regular
+ *     separator scan, and uses `findSeparatorOutsideQuotes` for the
+ *     `<` so a quoted-key with `<` inside isn't misread.)
+ *  6. (Resolved — colon-array parsing in `parseSpecialCases` now
+ *     uses `findSeparatorOutsideQuotes` for the first `:` and
+ *     refuses to fire when an earlier KEY_VALUE separator outside
+ *     quotes appears before that `:`, so EQUALS-style strings like
+ *     `y=a:b:c` aren't misread as arrays.)
  *  7. (Resolved — `selectSyntax` now requires `valueType === 'string'`
  *     before applying the semantic-category override; non-string
  *     values defer to the value-type branches.)
@@ -339,11 +343,7 @@ function hasKnownLimitation(input: unknown): boolean {
     // 75% of the time, all of which lose empty-array fidelity.
     if (Array.isArray(value) && value.length === 0) return true;
 
-    // (5) Quoted-key + `<`-in-key + boolean value.
-    if (key.includes('<') && typeof value === 'boolean') return true;
-
-    // (6) Quoted-key + `:`-in-key.
-    if (key.includes(':')) return true;
+    // (5) and (6) resolved; no constraints needed.
 
     // (7) and (8) resolved; no constraints needed.
 
