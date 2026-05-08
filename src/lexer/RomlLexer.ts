@@ -511,8 +511,34 @@ export class RomlLexer {
     // Parse double colon style: ::key::value::
     if (line.startsWith('::') && line.endsWith('::')) {
       const content = line.slice(2, -2);
-      // Find the :: separator within the content
-      const separatorIndex = content.indexOf('::');
+      // Find the structural `::` separator OUTSIDE any quoted
+      // region — `content.indexOf('::')` would split a quoted key
+      // like `"a::b"` at the inner `::` (limitation #6 family
+      // surfaced by Copilot review on PR #28).
+      let separatorIndex = -1;
+      {
+        let inQuotes = false;
+        let escapeNext = false;
+        for (let i = 0; i < content.length - 1; i++) {
+          const ch = content[i];
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+          if (ch === '\\') {
+            escapeNext = true;
+            continue;
+          }
+          if (ch === '"') {
+            inQuotes = !inQuotes;
+            continue;
+          }
+          if (!inQuotes && ch === ':' && content[i + 1] === ':') {
+            separatorIndex = i;
+            break;
+          }
+        }
+      }
       if (separatorIndex !== -1) {
         const keyPart = content.slice(0, separatorIndex);
         const valuePart = content.slice(separatorIndex + 2); // +2 to skip both colons

@@ -13,7 +13,7 @@ describe('Empty quoted-value regex (limitation #10)', () => {
   // so the round-trip path through the encoder doesn't trigger this.
   // But the lexer must still parse hand-written ROML correctly —
   // and it currently doesn't for `::key::""::`, `@key@""@`,
-  // `_key_""_`, the multi-bracket array item `<""\>`, and the
+  // `_key_""_`, the multi-bracket array item `<"">`, and the
   // pipe-array per-item / single-value forms.
   //
   // Fix: change `^"(.+)"$` to `^"(.*)"$` in all five remaining
@@ -51,6 +51,16 @@ describe('Empty quoted-value regex (limitation #10)', () => {
       // empty string (or, for synthetic wrapper keys, an empty
       // string in a 1-element array).
       expect(RomlFile.romlToJson('~ROML~\nx||""||')).toEqual({ x: '' });
+    });
+
+    it('parses DOUBLE_COLON with `::` inside a quoted key', () => {
+      // Surfaced by Copilot review on PR #28: the DOUBLE_COLON
+      // branch used `content.indexOf('::')` which split a quoted
+      // key containing `::` at the inner `::`. Now scan for the
+      // structural `::` outside quotes.
+      expect(RomlFile.romlToJson('~ROML~\n::"a::b"::"x"::')).toEqual({
+        'a::b': 'x',
+      });
     });
   });
 
