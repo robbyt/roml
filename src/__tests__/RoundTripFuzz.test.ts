@@ -194,11 +194,10 @@ describe('Round-trip property tests (fast-check)', () => {
  *     items, so the lexer's `<([^>]*)>` regex splits at the wrong
  *     `>`. We don't know which array style the encoder will pick (it
  *     hashes the key), so any string-array containing `>` is skipped.
- * 10. Empty-string value with a semantic-category key (`created` →
- *     AT_SANDWICH and similar): `parseSpecialCases` uses
- *     `^"(.+)"$` to detect quoted values, which doesn't match the
- *     empty `""`. The string gets parsed as the literal 2-char
- *     value `""`.
+ * 10. (Resolved — the value-quoted regex sites in
+ *     `parseSpecialCases` and the inline-array branches now use
+ *     `^"(.*)"$` so the empty `""` is recognised as an empty
+ *     string rather than parsed as the literal 2-char value.)
  * 11. JSON_STYLE primitive array containing a string with `"`: the
  *     encoder uses `JSON.stringify` (which escapes the quote as
  *     `\"`) but the parser slices off the outer quotes without
@@ -231,50 +230,6 @@ const COLLECTION_KEYS = new Set([
   'elements',
   'values',
   'data',
-]);
-
-const SEMANTIC_KEYS = new Set([
-  'name',
-  'first_name',
-  'last_name',
-  'email',
-  'phone',
-  'address',
-  'username',
-  'active',
-  'enabled',
-  'valid',
-  'working',
-  'online',
-  'disabled',
-  'inactive',
-  'tags',
-  'items',
-  'list',
-  'array',
-  'elements',
-  'values',
-  'data',
-  'id',
-  'uuid',
-  'hash',
-  'checksum',
-  'token',
-  'key',
-  'secret',
-  'salary',
-  'price',
-  'cost',
-  'amount',
-  'total',
-  'balance',
-  'fee',
-  'date',
-  'time',
-  'created',
-  'updated',
-  'timestamp',
-  'expires',
 ]);
 
 /**
@@ -355,8 +310,7 @@ function hasKnownLimitation(input: unknown): boolean {
       return true;
     }
 
-    // (10) Empty-string value with a semantic-category key.
-    if (value === '' && SEMANTIC_KEYS.has(key.toLowerCase())) return true;
+    // (10) resolved; no constraint needed.
 
     // (11) Array containing a string with `"` or `\` (JSON_STYLE
     //      escape mismatch — encoder uses JSON.stringify but the

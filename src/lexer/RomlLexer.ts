@@ -518,8 +518,10 @@ export class RomlLexer {
         const valuePart = content.slice(separatorIndex + 2); // +2 to skip both colons
         const k = extractKey(keyPart);
 
-        // Check if value is quoted
-        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        // Check if value is quoted. `(.*)` not `(.+)` so the empty
+        // quoted form `""` is recognised as an empty string rather
+        // than parsed as the literal 2-char value `""`.
+        const quotedValueMatch = valuePart.match(/^"(.*)"$/);
         if (quotedValueMatch) {
           return [
             k.key,
@@ -577,7 +579,8 @@ export class RomlLexer {
         const valuePart = content.slice(separatorPos + 1);
         const k = extractKey(keyPart);
 
-        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        // `(.*)` so the empty quoted form `""` is recognised.
+        const quotedValueMatch = valuePart.match(/^"(.*)"$/);
         if (quotedValueMatch) {
           return [
             k.key,
@@ -606,7 +609,8 @@ export class RomlLexer {
         const valuePart = content.slice(separatorPos + 1);
         const k = extractKey(keyPart);
 
-        const quotedValueMatch = valuePart.match(/^"(.+)"$/);
+        // `(.*)` so the empty quoted form `""` is recognised.
+        const quotedValueMatch = valuePart.match(/^"(.*)"$/);
         if (quotedValueMatch) {
           return [
             k.key,
@@ -634,8 +638,9 @@ export class RomlLexer {
         .map((match) => match[1])
         .filter((itemValue) => itemValue !== '') // Filter out empty brackets
         .map((itemValue) => {
-          // Check if item is quoted
-          const quotedMatch = itemValue.match(/^"(.+)"$/);
+          // Check if item is quoted. `(.*)` so the empty quoted
+          // form `""` is recognised as an empty string.
+          const quotedMatch = itemValue.match(/^"(.*)"$/);
           if (quotedMatch) {
             // Preserve quoted values as strings and unescape
             return unescapeStringValue(quotedMatch[1]);
@@ -661,8 +666,8 @@ export class RomlLexer {
           .split('||')
           .filter((item) => item.trim())
           .map((item) => {
-            // Check if item is quoted
-            const quotedMatch = item.match(/^"(.+)"$/);
+            // Check if item is quoted. `(.*)` so `""` parses as ''.
+            const quotedMatch = item.match(/^"(.*)"$/);
             if (quotedMatch) {
               // Preserve quoted values as strings and unescape
               return unescapeStringValue(quotedMatch[1]);
@@ -676,8 +681,9 @@ export class RomlLexer {
           return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
         }
 
-        // Check if single value is quoted
-        const quotedMatch = value.match(/^"(.+)"$/);
+        // Check if single value is quoted. `(.*)` so `""` parses
+        // as the empty string rather than the literal 2-char `""`.
+        const quotedMatch = value.match(/^"(.*)"$/);
         const singleValue = quotedMatch
           ? unescapeStringValue(quotedMatch[1])
           : this.parseSpecialValue(value);
