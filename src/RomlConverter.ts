@@ -589,9 +589,29 @@ export class RomlConverter {
     const valueType = typeof value;
     const valueLength = String(value).length;
 
-    // Check semantic categories first (apply to both odd and even lines)
+    // Special values (null, undefined, empty string) take precedence
+    // — `convertValue` passes the sentinel string `'__NULL__'` /
+    // `'__UNDEFINED__'` / `''` here, but they need a style that emits
+    // the sentinel UNQUOTED so the parser recognises them as the
+    // original null / undefined / empty-string. Without this gate the
+    // string-branch below would pick a quoting style for them on
+    // odd-line vowel-starting keys (limitation #8).
+    if (lineFeatures.isSpecialValue) {
+      if (isEvenLine) {
+        return EVEN_LINE_STYLES.DOLLAR;
+      } else {
+        return SYNTAX_STYLES.FAKE_COMMENT;
+      }
+    }
+
+    // Check semantic categories first (apply to both odd and even lines).
+    // Only apply for true string values — the override forces a style
+    // based on key name, but several semantic styles (notably PERSONAL
+    // → QUOTED) wrap the value in double quotes and would coerce
+    // non-strings (booleans, numbers) into string round-trips
+    // (limitation #7).
     const semanticStyle = this.getSemanticStyle(key);
-    if (semanticStyle && !isEvenLine) {
+    if (semanticStyle && !isEvenLine && valueType === 'string') {
       return SYNTAX_STYLES[semanticStyle];
     }
 
@@ -643,15 +663,6 @@ export class RomlConverter {
         } else {
           return SYNTAX_STYLES.FAKE_COMMENT;
         }
-      }
-    }
-
-    // Handle special values (null, undefined, empty)
-    if (lineFeatures.isSpecialValue) {
-      if (isEvenLine) {
-        return EVEN_LINE_STYLES.DOLLAR;
-      } else {
-        return SYNTAX_STYLES.FAKE_COMMENT;
       }
     }
 

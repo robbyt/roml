@@ -175,21 +175,25 @@ describe('ROML Round-Trip Conversion Tests', () => {
   describe('Syntax Style Verification', () => {
     it('should use semantic-based syntax styles with alternating behavior', () => {
       const data = {
-        name: 'Test', // Line 1 (odd): Personal -> quoted
-        active: true, // Line 2 (even): Status -> equals yes/no
-        tags: ['a', 'b'], // Line 3 (odd): Collection -> BRACKETS
-        id: 'abc123', // Line 4 (even): Technical -> tilde (vowel-starting)
-        salary: 50000, // Line 5 (odd): Financial -> fake comment
+        name: 'Test', // Line 1 (odd): PERSONAL + string -> quoted
+        active: true, // Line 2 (even): boolean -> equals yes/no
+        tags: ['a', 'b'], // Line 3 (odd): array (semantic only applies for strings)
+        id: 'abc123', // Line 4 (even): vowel-starting + string -> tilde
+        salary: 50000, // Line 5 (odd): number -> ampersand (semantic skipped for non-strings)
       };
 
       const romlContent = RomlFile.jsonToRoml(data);
 
-      // Check for expected syntax patterns with alternating line behavior
-      expect(romlContent).toContain('name="Test"'); // Line 1: Quoted style
-      expect(romlContent).toContain('active=yes'); // Line 2: Even line boolean
-      expect(romlContent).toContain('tags<a><b>'); // Line 3: Bracket array style
-      expect(romlContent).toContain('id~abc123'); // Line 4: Even line, vowel-starting
-      expect(romlContent).toContain('//salary//50000'); // Line 5: Fake comment style
+      // The semantic-category override only applies when the value
+      // is a string — non-strings (boolean / number / array) defer
+      // to the value-type rules so they don't get stringified by
+      // QUOTED-mapped categories like PERSONAL or FAKE_COMMENT-
+      // mapped FINANCIAL on values that aren't actually strings.
+      expect(romlContent).toContain('name="Test"'); // Line 1: PERSONAL + string -> quoted
+      expect(romlContent).toContain('active=yes'); // Line 2: even-line boolean
+      expect(romlContent).toContain('tags<a><b>'); // Line 3: bracket array style (hash-selected)
+      expect(romlContent).toContain('id~abc123'); // Line 4: vowel-starting key + string
+      expect(romlContent).toContain('&salary&50000'); // Line 5: number -> ampersand
     });
   });
 
@@ -354,18 +358,24 @@ flag4=no`;
 
     it('should apply even-line styles to special values', () => {
       const data = {
-        value1: null, // Line 1 (odd) - fake comment style
-        value2: null, // Line 2 (even) - equals style for special values
-        value3: '', // Line 3 (odd) - fake comment style
-        value4: '', // Line 4 (even) - equals style for special values
+        value1: null, // Line 1 (odd): special value -> fake comment
+        value2: null, // Line 2 (even): special value -> dollar
+        value3: '', // Line 3 (odd): empty string -> fake comment
+        value4: '', // Line 4 (even): empty string -> dollar
       };
 
       const romlContent = RomlFile.jsonToRoml(data);
 
-      expect(romlContent).toContain('//value1//__NULL__'); // Odd line
-      expect(romlContent).toContain('value2=__NULL__'); // Even line: equals for special values
-      expect(romlContent).toContain('//value3//""'); // Odd line - empty string preserved as quoted
-      expect(romlContent).toContain('value4=""'); // Even line: equals style with quoted empty string
+      // Special values (null, '') are routed through the dedicated
+      // syntax styles before any value-type or semantic dispatch:
+      // FAKE_COMMENT on odd lines, DOLLAR on even. This guarantees
+      // the sentinel emits UNQUOTED so the parser recognises it
+      // rather than treating it as the literal string "__NULL__"
+      // / "".
+      expect(romlContent).toContain('//value1//__NULL__'); // odd: fake-comment
+      expect(romlContent).toContain('value2$__NULL__'); // even: dollar
+      expect(romlContent).toContain('//value3//""'); // odd: empty string preserved as quoted in fake-comment
+      expect(romlContent).toContain('value4$""'); // even: dollar with empty-string quoted
     });
   });
 

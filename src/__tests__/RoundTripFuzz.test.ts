@@ -179,14 +179,12 @@ describe('Round-trip property tests (fast-check)', () => {
  *  6. Quoted-key + `:`-containing key in any KEY_VALUE form: the
  *     colon-array regex in `parseSpecialCases` is not quote-aware,
  *     causing `"::"=value` to be misread as a colon-delimited array.
- *  7. Semantic-category key (`name`, `id`, `salary`, ...) with a
- *     non-string value: the encoder routes these through `QUOTED` or
- *     `FAKE_COMMENT` regardless of value type, so `{name: false}`
- *     becomes `name="false"` and round-trips as the string `"false"`.
- *  8. `null` values with a vowel-starting key on an odd line: the
- *     encoder picks `QUOTED` for the `__NULL__` sentinel string,
- *     emitting `key="__NULL__"` which round-trips as the string
- *     `"__NULL__"` rather than null.
+ *  7. (Resolved — `selectSyntax` now requires `valueType === 'string'`
+ *     before applying the semantic-category override; non-string
+ *     values defer to the value-type branches.)
+ *  8. (Resolved — `isSpecialValue` is checked ahead of the type-
+ *     specific branches, so null / undefined / empty-string sentinels
+ *     always pick a non-quoting style regardless of the key shape.)
  *  9. BRACKETS-style primitive array containing a string item with
  *     `>` in it: the encoder doesn't escape `>` inside `<value>`
  *     items, so the lexer's `<([^>]*)>` regex splits at the wrong
@@ -347,16 +345,7 @@ function hasKnownLimitation(input: unknown): boolean {
     // (6) Quoted-key + `:`-in-key.
     if (key.includes(':')) return true;
 
-    // (7) Semantic-category key with a non-string, non-object value.
-    if (
-      SEMANTIC_KEYS.has(key.toLowerCase()) &&
-      (typeof value === 'boolean' || typeof value === 'number' || value === null)
-    ) {
-      return true;
-    }
-
-    // (8) Null value with a vowel-starting key.
-    if (value === null && /^[aeiouAEIOU]/.test(key)) return true;
+    // (7) and (8) resolved; no constraints needed.
 
     // (9) Array containing a string with `>` (BRACKETS-style escape).
     if (
