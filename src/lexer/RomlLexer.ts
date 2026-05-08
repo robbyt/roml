@@ -350,16 +350,6 @@ export class RomlLexer {
       }
     }
 
-    // Check for single bracket pattern: key<value>
-    const bracketMatch = line.match(/^(.+?)<(.+)>$/);
-    if (bracketMatch) {
-      return {
-        style: 'BRACKETS',
-        keyPart: bracketMatch[1],
-        valuePart: bracketMatch[2],
-      };
-    }
-
     // Define separator patterns in order of precedence
     const separators = [
       { char: '=', style: 'EQUALS' },
@@ -401,6 +391,26 @@ export class RomlLexer {
         keyPart: line.slice(0, earliestPos),
         valuePart: line.slice(earliestPos + 1),
       };
+    }
+
+    // Fallback to single bracket pattern: key<value>. Run after the
+    // separator scan so an EQUALS / COLON / etc. line wins when both
+    // shapes are present (e.g. `key=<value>` is EQUALS with value
+    // `<value>`, not BRACKETS with key `key=` and value `value`).
+    // Find the `<` outside any quoted region so a quoted-key like
+    // `"<"` doesn't get split at the wrong char. Require non-empty
+    // value content so `key<>` isn't claimed (that shape is the
+    // single-element array marker handled elsewhere).
+    if (line.endsWith('>')) {
+      const inner = line.slice(0, -1);
+      const bracketPos = this.findSeparatorOutsideQuotes(inner, '<');
+      if (bracketPos !== -1 && bracketPos < inner.length - 1) {
+        return {
+          style: 'BRACKETS',
+          keyPart: inner.slice(0, bracketPos),
+          valuePart: inner.slice(bracketPos + 1),
+        };
+      }
     }
 
     return null;
@@ -635,15 +645,11 @@ export class RomlLexer {
       return [k.key, items, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
     }
 
-    // Parse single bracket style: key<value>
-    const bracketMatch = line.match(/^(.+?)<(.+)>$/);
-    if (bracketMatch) {
-      const k = extractKey(bracketMatch[1]);
-      const value = this.parseSpecialValue(bracketMatch[2]);
-      if (value === 'true') return [k.key, true, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
-      if (value === 'false') return [k.key, false, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
-      return [k.key, value, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
-    }
+    // Single-bracket parsing has moved to `analyzeLineStructure`'s
+    // fallback so it runs after the regular separator scan — if a
+    // line has both an EQUALS/COLON/etc. separator and a `<...>`
+    // shape, the regular separator wins.
+
 
     // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
     const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)\|\|$/);
@@ -730,11 +736,16 @@ export class RomlLexer {
       return [k.key, items, 'JSON_STYLE', k.wasQuoted, k.hasPrimePrefix];
     }
 
-    // Parse colon-delimited arrays: key:item1:item2:item3
-    const colonArrayMatch = line.match(/^(.+?):(.+)$/);
-    if (colonArrayMatch && colonArrayMatch[2].includes(':')) {
-      const k = extractKey(colonArrayMatch[1]);
-      const items = colonArrayMatch[2].split(':').map((item) => {
+    // Parse colon-delimited arrays: key:item1:item2:item3. Find the
+    // first `:` outside any quoted region so a key like `"::"`
+    // (legitimate quoted-key containing colons) isn't misread as a
+    // colon-array. The "this is an array, not a scalar" disambiguator
+    // is unchanged: the value-part must contain at least one more `:`.
+    const firstColonPos = this.findSeparatorOutsideQuotes(line, ':');
+    const colonRemainder = firstColonPos !== -1 ? line.slice(firstColonPos + 1) : '';
+    if (firstColonPos !== -1 && colonRemainder.includes(':')) {
+      const k = extractKey(line.slice(0, firstColonPos));
+      const items = colonRemainder.split(':').map((item) => {
         // Check if item is quoted (can be empty)
         const quotedMatch = item.match(/^"(.*)"$/);
         if (quotedMatch) {
