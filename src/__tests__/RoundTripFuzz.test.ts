@@ -165,9 +165,9 @@ describe('Round-trip property tests (fast-check)', () => {
  *     `__roml_items__` (array value) or `__roml_value__` (any value)
  *     is structurally indistinguishable from a wrap of a non-object
  *     root after parsing.
- *  2. Backslash in a key — `needsQuotedKey` doesn't flag `\`, so the
- *     raw byte falls into the lexer's escape-aware separator finder
- *     and swallows the next char.
+ *  2. (Resolved — `needsQuotedKey` now flags `\`-containing keys so
+ *     the encoder routes them through QUOTED. Number kept for
+ *     stable cross-referencing in this docstring.)
  *  3. Single-element primitive arrays — `key||x||` is structurally
  *     ambiguous with scalar `key||x||` in PIPES / JSON / COLON_DELIM
  *     styles. Only BRACKETS appends a `<>` marker for arity-1.
@@ -325,8 +325,7 @@ function hasKnownLimitation(input: unknown): boolean {
   }
 
   for (const [key, value] of Object.entries(obj)) {
-    // (2) Backslash in key.
-    if (key.includes('\\')) return true;
+    // (2) Backslash in key — resolved; no constraint needed.
 
     // (3) Single-element primitive arrays.
     if (

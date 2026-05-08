@@ -203,6 +203,14 @@ export class RomlConverter {
     // Check for keys with quotes (need escaping)
     if (key.includes('"')) return true;
 
+    // Backslash collides with the lexer's escape-aware separator
+    // finder (`\` swallows the next char while scanning for the
+    // KEY_VALUE separator outside quotes), so a raw `\` in a key
+    // would lose the actual separator. Routing through the QUOTED
+    // form lets `escapeForRoml` double the backslash and the
+    // lexer's `unescapeStringValue` reverse it cleanly.
+    if (key.includes('\\')) return true;
+
     // Check for keys that start with comment-like syntax
     if (key.startsWith('#') || key.startsWith('//')) return true;
 
