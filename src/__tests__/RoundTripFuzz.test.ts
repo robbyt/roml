@@ -1,5 +1,14 @@
 import * as fc from 'fast-check';
 import { RomlFile } from '../file/RomlFile';
+import { SEMANTIC_CATEGORIES } from '../RomlConverter';
+
+/**
+ * The full set of semantic-category keywords (every entry across
+ * every category in `SEMANTIC_CATEGORIES`). Imported from the
+ * canonical source rather than duplicated here so the fuzz arbitrary
+ * automatically widens whenever the taxonomy grows. See issue #29.
+ */
+const SEMANTIC_KEYWORDS: readonly string[] = Object.values(SEMANTIC_CATEGORIES).flat();
 
 /**
  * Property-based round-trip coverage.
@@ -80,12 +89,7 @@ const stressKey = fc.oneof(
     '__EMPTY__',
     '__UNDEFINED__',
     '!warn',
-    'name',
-    'salary',
-    'created',
-    'tags',
-    'id',
-    'active'
+    ...SEMANTIC_KEYWORDS
   )
 );
 

@@ -118,7 +118,7 @@ interface ConversionContext {
   readonly documentFeatures: DocumentFeatures;
 }
 
-const SEMANTIC_CATEGORIES = {
+export const SEMANTIC_CATEGORIES = {
   PERSONAL: ['name', 'first_name', 'last_name', 'email', 'phone', 'address', 'username'] as const,
   STATUS: ['active', 'enabled', 'valid', 'working', 'online', 'disabled', 'inactive'] as const,
   COLLECTIONS: ['tags', 'items', 'list', 'array', 'elements', 'values', 'data'] as const,
