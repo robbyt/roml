@@ -626,33 +626,58 @@ export class RomlLexer {
       }
     }
 
-    // Parse underscore style: _key_value_
+    // Parse underscore style: _key_value_. The shape is structurally
+    // ambiguous with any other KEY_VALUE syntax whose key and value
+    // both happen to start/end with `_` (e.g. DOLLAR for the
+    // synthetic-wrapper key `__roml_value__` with a special-value
+    // payload renders as `__roml_value__$__NULL__`, which starts and
+    // ends with `_`). Only claim the line as UNDERSCORE when no
+    // earlier KEY_VALUE separator outside quotes appears before the
+    // first `_` in the content — same precedence pattern as the
+    // colon-array fix in #27.
     if (line.startsWith('_') && line.endsWith('_')) {
       const content = line.slice(1, -1);
       const separatorPos = this.findSeparatorOutsideQuotes(content, '_');
       if (separatorPos !== -1) {
-        const keyPart = content.slice(0, separatorPos);
-        const valuePart = content.slice(separatorPos + 1);
-        const k = extractKey(keyPart);
+        // If any other KEY_VALUE separator appears outside quotes
+        // anywhere in the content, prefer that interpretation: the
+        // line is structurally another style whose key/value happen
+        // to be `_`-bounded. Without this, e.g. the encoder's
+        // DOLLAR output `__roml_value__$__NULL__` for a top-level
+        // null gets stolen by the UNDERSCORE parser because the
+        // line starts and ends with `_`.
+        const otherSeparators = ['=', ':', '~', '#', '%', '$', '^', '+'];
+        let hasOtherSeparator = false;
+        for (const sep of otherSeparators) {
+          if (this.findSeparatorOutsideQuotes(content, sep) !== -1) {
+            hasOtherSeparator = true;
+            break;
+          }
+        }
+        if (!hasOtherSeparator) {
+          const keyPart = content.slice(0, separatorPos);
+          const valuePart = content.slice(separatorPos + 1);
+          const k = extractKey(keyPart);
 
-        // `(.*)` so the empty quoted form `""` is recognised.
-        const quotedValueMatch = valuePart.match(/^"(.*)"$/);
-        if (quotedValueMatch) {
+          // `(.*)` so the empty quoted form `""` is recognised.
+          const quotedValueMatch = valuePart.match(/^"(.*)"$/);
+          if (quotedValueMatch) {
+            return [
+              k.key,
+              unescapeStringValue(quotedValueMatch[1]),
+              'UNDERSCORE',
+              k.wasQuoted,
+              k.hasPrimePrefix,
+            ];
+          }
           return [
             k.key,
-            unescapeStringValue(quotedValueMatch[1]),
+            this.parseSpecialValue(valuePart),
             'UNDERSCORE',
             k.wasQuoted,
             k.hasPrimePrefix,
           ];
         }
-        return [
-          k.key,
-          this.parseSpecialValue(valuePart),
-          'UNDERSCORE',
-          k.wasQuoted,
-          k.hasPrimePrefix,
-        ];
       }
     }
 
