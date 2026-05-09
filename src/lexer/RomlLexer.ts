@@ -632,9 +632,14 @@ export class RomlLexer {
     // synthetic-wrapper key `__roml_value__` with a special-value
     // payload renders as `__roml_value__$__NULL__`, which starts and
     // ends with `_`). Only claim the line as UNDERSCORE when no
-    // earlier KEY_VALUE separator outside quotes appears before the
-    // first `_` in the content — same precedence pattern as the
-    // colon-array fix in #27.
+    // other KEY_VALUE separator outside quotes appears anywhere in
+    // the content — same precedence-by-rejection pattern as the
+    // colon-array fix in #27, but checked across the full content
+    // rather than only before the first `_`, because (1) the first
+    // `_` in a synthetic-wrap line is at position 0 so "earlier"
+    // would be vacuous, and (2) any genuine UNDERSCORE-style line
+    // emitted by the encoder has only `_` as its structural
+    // separator.
     if (line.startsWith('_') && line.endsWith('_')) {
       const content = line.slice(1, -1);
       const separatorPos = this.findSeparatorOutsideQuotes(content, '_');
