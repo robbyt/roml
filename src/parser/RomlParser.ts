@@ -498,16 +498,18 @@ export class RomlParser {
   }
 
   /**
-   * Validate the root-wrapper META tags against the parsed document
-   * shape. A `ROOT_ARRAY` declaration must accompany a single-key
-   * `__roml_items__: [...]` payload; a `ROOT_PRIMITIVE` declaration
-   * must accompany a single-key `__roml_value__: x` payload. The two
-   * wrappers are mutually exclusive. Surfacing these as parse errors
-   * keeps malformed documents from silently degrading.
+   * Validate that the root-wrapper META tags are mutually exclusive.
+   * A document may declare `ROOT_ARRAY` or `ROOT_PRIMITIVE`, not
+   * both, since they describe contradictory wrap shapes.
    *
-   * The check happens after `buildAST` but before `astToData`, so
-   * `this.tokens`-derived flags are populated and the unwrap logic
-   * can still trust the metadata.
+   * Shape-level validation (`ROOT_ARRAY` requires a single-key
+   * `__roml_items__: [...]` payload, etc.) is intentionally not
+   * performed here; if a hand-written document declares the META
+   * but ships a different shape, `unwrapSyntheticObject` will
+   * simply not unwrap, and the user gets back the literal payload
+   * they wrote. That degrades silently to "regular object" rather
+   * than throwing, which preserves the loose-parsing posture of the
+   * format.
    */
   private validateRootMetaConsistency(): void {
     if (this.rootArrayWrapped && this.rootPrimitiveWrapped) {
