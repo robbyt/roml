@@ -214,12 +214,10 @@ describe('Round-trip property tests (fast-check)', () => {
  * 12. (Resolved for arrays — the PIPES array emitter now quotes
  *     items containing `|`, and the lexer's PIPES content split is
  *     quote-aware via `splitOutsideQuotes`, so `||` inside a quoted
- *     item is preserved as part of the item. Non-array `|`-bearing
- *     string values under COLLECTIONS-category keys are still
- *     constrained out under #13; non-array `|`-bearing values under
- *     non-COLLECTIONS keys round-trip through the existing
- *     unquoted-style paths because their separators don't include
- *     `|`.)
+ *     item is preserved as part of the item. Scalar `|`-bearing
+ *     strings under any key — including COLLECTIONS keys, after
+ *     #13 — round-trip through their respective non-PIPES KV
+ *     styles because those styles' separators don't include `|`.)
  * 13. (Resolved — `selectSyntax` now skips the COLLECTIONS-PIPES
  *     override for scalar string values, since the PIPES KV
  *     template is byte-for-byte identical to a single-item PIPES
@@ -345,11 +343,9 @@ function hasKnownLimitation(input: unknown): boolean {
     }
 
     // (12) Resolved for arrays — see top-level docstring. Scalar
-    //      `|`-bearing values under non-COLLECTIONS keys already
-    //      round-trip via the existing FAKE_COMMENT/EQUALS/etc.
-    //      paths whose separators don't include `|`. Scalar
-    //      `|`-bearing values under COLLECTIONS keys are still
-    //      constrained out by (13) below.
+    //      `|`-bearing strings under any key (including COLLECTIONS
+    //      keys after the #13 fix) round-trip via the value-type
+    //      KV branches whose separators don't include `|`.
 
     // (13) Resolved — `selectSyntax` now skips the COLLECTIONS-PIPES
     //      override for scalar string values, so a scalar value
