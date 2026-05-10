@@ -5,12 +5,12 @@ describe('Pipe (`|`/`||`) handling in PIPES-style array items', () => {
   //
   // PIPES is the `||`-delimited array style (`||` between items,
   // wrapping `||` at start and end): `key||a||b||c||`. The encoder
-  // picks the array style by hashing the key, so any single-char key
-  // like `x` or any short key like `p` / `pp` deterministically lands
-  // in the PIPES bucket. This fixture relies on that determinism so
-  // the tests actually exercise the PIPES code path; if the hash
-  // changes shape and one of these keys moves to a different style,
-  // pick another short key that still routes to PIPES.
+  // picks the array style by hashing the key (`simpleHash(key) % 4`),
+  // so only some keys land in the PIPES bucket. The keys used here
+  // (`x`, `foo`-paired-with-`x`) currently hash to PIPES; if the
+  // hash function changes and they no longer do, swap in another key
+  // whose hash output selects PIPES — keeping the test exercising
+  // the PIPES code path is what makes it a regression for #12.
   //
   // Pre-fix failure modes:
   //   1. `||` inside an item — `{x: ["a||b", "c"]}` emitted
@@ -20,9 +20,15 @@ describe('Pipe (`|`/`||`) handling in PIPES-style array items', () => {
   //      the regex/split combo dropped or mangled the trailing `|`.
   //
   // Fix has two halves:
-  //   - encoder: `isAmbiguousString` now flags `|`, so PIPES items
-  //     containing pipes route through the QUOTED-inside-PIPES form
-  //     (`"a|b"` instead of bare `a|b`).
+  //   - encoder: the PIPES array emitter (in `RomlConverter.ts`)
+  //     now wraps any item containing `|` via the existing
+  //     QUOTED-inside-PIPES path (`"a|b"` instead of bare `a|b`).
+  //     The check is local to the PIPES emitter — NOT in
+  //     `isAmbiguousString` — so scalar `|`-bearing values under
+  //     non-COLLECTIONS keys keep their existing unquoted-style
+  //     routing and don't hit the QUOTED escape pipeline (which
+  //     would expose a separate, pre-existing unescape-ordering
+  //     quirk for literal `\r`/`\n`/`\t`, tracked as #16).
   //   - lexer: PIPES content split is now quote-aware via
   //     `splitOutsideQuotes`, so `||` inside a quoted item is part
   //     of the item rather than a separator.
