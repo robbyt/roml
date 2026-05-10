@@ -113,14 +113,47 @@ describe('COLLECTIONS-key scalar values skip the PIPES override', () => {
   });
 
   describe('regression: other semantic categories still apply their override', () => {
-    it('round-trips {name:"alice"} (PERSONAL → QUOTED)', () => {
-      const input = { name: 'alice' };
-      expect(roundTrip(input)).toEqual(input);
+    // These cases assert against the EMITTED ROML, not just the
+    // round-trip equality, because round-trip alone would pass
+    // even if the override silently stopped applying — every
+    // semantic style produces a different shape, and as long as
+    // each shape round-trips, equality wouldn't catch a regression.
+    // Asserting on the emitted ROML pins the style choice.
+
+    it('PERSONAL keys still route to QUOTED (`name="alice"`)', () => {
+      const roml = RomlFile.jsonToRoml({ name: 'alice' });
+      expect(roml).toContain('name="alice"');
+      expect(roundTrip({ name: 'alice' })).toEqual({ name: 'alice' });
     });
 
-    it('round-trips {active:"yes"} (STATUS)', () => {
-      const input = { active: 'yes' };
-      expect(roundTrip(input)).toEqual(input);
+    it('STATUS keys still route to BRACKETS (`active<"yes">`)', () => {
+      const roml = RomlFile.jsonToRoml({ active: 'yes' });
+      expect(roml).toContain('active<');
+      expect(roundTrip({ active: 'yes' })).toEqual({ active: 'yes' });
+    });
+
+    it('TECHNICAL keys still route to AMPERSAND (`&id&abc`)', () => {
+      const roml = RomlFile.jsonToRoml({ id: 'abc' });
+      expect(roml).toContain('&id&');
+      expect(roundTrip({ id: 'abc' })).toEqual({ id: 'abc' });
+    });
+  });
+
+  describe('regression: COLLECTIONS keys no longer route scalars to PIPES KV', () => {
+    // Asserting on the emitted ROML rather than just round-trip
+    // equality — the previous PIPES-KV emission was structurally
+    // distinguishable (`||tags||plain||`), so explicitly checking
+    // the output does NOT start with `||` confirms the override
+    // skip is what's doing the work, not some other accident.
+
+    it('{tags:"plain"} no longer emits a `||tags||...||` PIPES line', () => {
+      const roml = RomlFile.jsonToRoml({ tags: 'plain' });
+      expect(roml).not.toMatch(/^\|\|tags\|\|/m);
+    });
+
+    it('{items:"x"} no longer emits a `||items||...||` PIPES line', () => {
+      const roml = RomlFile.jsonToRoml({ items: 'x' });
+      expect(roml).not.toMatch(/^\|\|items\|\|/m);
     });
   });
 });
