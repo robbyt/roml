@@ -270,7 +270,9 @@ const COLLECTION_KEYS = new Set([
  * referenced: 3 (single-element), 9 (`>` in items), 11 (`"`/`\` in
  * items), 14 (other inline-style separator collisions). `|` is no
  * longer in this screen — limitation #12 is resolved via the
- * quote-aware PIPES split + `isAmbiguousString` flagging `|`.
+ * PIPES array emitter quoting `|`-bearing items locally (not via
+ * `isAmbiguousString`) plus the lexer's quote-aware PIPES content
+ * split (`splitOutsideQuotes`).
  */
 function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   // (3) Single-element primitive arrays.
