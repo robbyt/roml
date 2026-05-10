@@ -639,8 +639,24 @@ export class RomlConverter {
     // styles (notably PERSONAL → QUOTED) wrap the value in double
     // quotes and would coerce non-strings (booleans, numbers) into
     // string round-trips (limitation #7).
+    //
+    // PIPES (the COLLECTIONS-category style) is also skipped here:
+    // its KV template `||${key}||${value}||` is byte-for-byte
+    // identical to a single-item PIPES array's emission, so a
+    // scalar string under a COLLECTIONS key (`tags`, `items`, ...)
+    // would emit a line the lexer parses as `{||key: value}` —
+    // the leading `||` of the wrapper gets reattached to the key.
+    // Fall through to the value-type branches and let them pick a
+    // non-PIPES KV style instead (limitation #13). Arrays under
+    // COLLECTIONS keys go through `selectArrayStyle`, not this
+    // function, so they keep their existing PIPES-or-other routing.
     const semanticStyle = this.getSemanticStyle(key);
-    if (semanticStyle && !isEvenLine && valueType === 'string') {
+    if (
+      semanticStyle &&
+      !isEvenLine &&
+      valueType === 'string' &&
+      semanticStyle !== 'PIPES'
+    ) {
       return SYNTAX_STYLES[semanticStyle];
     }
 
