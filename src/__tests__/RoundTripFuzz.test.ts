@@ -220,12 +220,13 @@ describe('Round-trip property tests (fast-check)', () => {
  *     non-COLLECTIONS keys round-trip through the existing
  *     unquoted-style paths because their separators don't include
  *     `|`.)
- * 13. COLLECTIONS-category key (`tags`, `items`, `list`, ...) with a
- *     non-array value: the encoder routes these through
- *     `SYNTAX_STYLES.PIPES` which renders `||key||value||` —
- *     structurally identical to a primitive PIPES array with key
- *     `||key` and value `value`, so the lexer mis-parses. Same
- *     family as limitation 7.
+ * 13. (Resolved — `selectSyntax` now skips the COLLECTIONS-PIPES
+ *     override for scalar string values, since the PIPES KV
+ *     template is byte-for-byte identical to a single-item PIPES
+ *     array's emission. Scalars under COLLECTIONS keys fall
+ *     through to the value-type branches and pick a non-PIPES
+ *     KV style. Array values under those keys still go through
+ *     `selectArrayStyle` and keep their existing routing.)
  * 14. Array items containing separator characters that aren't
  *     escaped by the corresponding inline style — `:` (COLON_DELIM),
  *     `>` (BRACKETS, see #9), `"` (JSON_STYLE, see #11). `|` (PIPES)
@@ -254,16 +255,6 @@ describe('Round-trip property tests (fast-check)', () => {
  *     constraints just shifted the seed sequence so fast-check
  *     happens to surface this case now.
  */
-const COLLECTION_KEYS = new Set([
-  'tags',
-  'items',
-  'list',
-  'array',
-  'elements',
-  'values',
-  'data',
-]);
-
 /**
  * Per-item screens that apply to any array (whether the array is the
  * top-level input or stored under an object key). Limitations
@@ -360,11 +351,10 @@ function hasKnownLimitation(input: unknown): boolean {
     //      `|`-bearing values under COLLECTIONS keys are still
     //      constrained out by (13) below.
 
-    // (13) COLLECTIONS-category key with a non-array value — PIPES
-    //      KEY_VALUE shape collides with PIPES primitive-array shape.
-    if (COLLECTION_KEYS.has(key.toLowerCase()) && !Array.isArray(value)) {
-      return true;
-    }
+    // (13) Resolved — `selectSyntax` now skips the COLLECTIONS-PIPES
+    //      override for scalar string values, so a scalar value
+    //      under a COLLECTIONS key picks a non-PIPES KV style and
+    //      round-trips cleanly.
 
     // (14) Array items containing un-escaped inline-array separator
     //      chars: `:`, `>`, `"` (already covered by #11 but restated
