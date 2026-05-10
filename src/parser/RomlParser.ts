@@ -78,6 +78,14 @@ export class RomlParser {
   private metaTagPresent: boolean = false;
   private primesDetected: boolean = false;
   private invalidPrimeKeys: string[] = [];
+  // Root-wrapper META state. Set by `checkForMetaTag` when the
+  // corresponding tag is seen in the document header. The unwrap
+  // logic consults these flags so that a user object whose only key
+  // happens to be `__roml_items__` / `__roml_value__` (without the
+  // META tag) is round-tripped as an object instead of being
+  // unwrapped.
+  private rootArrayWrapped: boolean = false;
+  private rootPrimitiveWrapped: boolean = false;
 
   public parse(tokens: RomlToken[]): RomlParseResult {
     this.tokens = tokens;
@@ -86,6 +94,8 @@ export class RomlParser {
     this.metaTagPresent = false;
     this.primesDetected = false;
     this.invalidPrimeKeys = [];
+    this.rootArrayWrapped = false;
+    this.rootPrimitiveWrapped = false;
 
     // Check for META tag
     this.checkForMetaTag();
@@ -94,6 +104,7 @@ export class RomlParser {
 
     // Validate prime consistency
     this.validatePrimeConsistency();
+    this.validateRootMetaConsistency();
 
     const data = this.astToData(ast);
 
@@ -336,13 +347,22 @@ export class RomlParser {
   }
 
   /**
-   * Unwrap synthetic objects back to their original types
+   * Unwrap synthetic objects back to their original types.
+   *
+   * The unwrap is META-tag-gated: the encoder emits
+   * `# ~META~ ROOT_ARRAY` or `# ~META~ ROOT_PRIMITIVE` whenever it
+   * synthetically wraps a non-object root, and only the presence of
+   * the matching META tag licenses the parser to unwrap. Without the
+   * tag, a wrapper-shaped user document (e.g. `{"__roml_items__":
+   * [1,2,3]}` written by hand) is round-tripped as a regular object
+   * rather than collapsed to an array.
    */
   private unwrapSyntheticObject(data: Record<string, any>): any {
     const keys = Object.keys(data);
 
     // Check for array wrapper: {"__roml_items__": [...]}
     if (
+      this.rootArrayWrapped &&
       keys.length === 1 &&
       keys[0] === SYNTHETIC_ITEMS_KEY &&
       Array.isArray(data[SYNTHETIC_ITEMS_KEY])
@@ -351,7 +371,11 @@ export class RomlParser {
     }
 
     // Check for primitive wrapper: {"__roml_value__": ...}
-    if (keys.length === 1 && keys[0] === SYNTHETIC_VALUE_KEY) {
+    if (
+      this.rootPrimitiveWrapped &&
+      keys.length === 1 &&
+      keys[0] === SYNTHETIC_VALUE_KEY
+    ) {
       return data[SYNTHETIC_VALUE_KEY];
     }
 
@@ -437,22 +461,22 @@ export class RomlParser {
   }
 
   private checkForMetaTag(): void {
-    // Look for META tag in HEADER token or in the raw value of tokens
+    // Look for META tags in HEADER tokens or in the raw value of
+    // tokens. A document can carry several META tags simultaneously
+    // (e.g. a top-level array of primes carries both ROOT_ARRAY and
+    // SIEVE_OF_ERATOSTHENES_INVOKED), so we don't break on the
+    // first match — keep scanning to set every flag we see.
     for (const token of this.tokens) {
-      if (token.type === 'HEADER' && token.value) {
-        if (token.value.includes(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)) {
-          this.metaTagPresent = true;
-          break;
-        }
-      }
-      // Also check in the raw token value in case it's in a comment-style line
-      if (
-        token.value &&
-        typeof token.value === 'string' &&
-        token.value.includes(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)
-      ) {
+      const value = token.value;
+      if (typeof value !== 'string') continue;
+      if (value.includes(`~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED}`)) {
         this.metaTagPresent = true;
-        break;
+      }
+      if (value.includes(`~META~ ${MetaTags.ROOT_ARRAY}`)) {
+        this.rootArrayWrapped = true;
+      }
+      if (value.includes(`~META~ ${MetaTags.ROOT_PRIMITIVE}`)) {
+        this.rootPrimitiveWrapped = true;
       }
     }
   }
@@ -469,6 +493,28 @@ export class RomlParser {
       this.errors.push(
         `Document declares ~META~ ${MetaTags.SIEVE_OF_ERATOSTHENES_INVOKED} but contains no prime-prefixed keys. ` +
           'Remove the META tag or add prime prefixes (!) to keys with prime number values.'
+      );
+    }
+  }
+
+  /**
+   * Validate that the root-wrapper META tags are mutually exclusive.
+   * A document may declare `ROOT_ARRAY` or `ROOT_PRIMITIVE`, not
+   * both, since they describe contradictory wrap shapes.
+   *
+   * Shape-level validation (`ROOT_ARRAY` requires a single-key
+   * `__roml_items__: [...]` payload, etc.) is intentionally not
+   * performed here; if a hand-written document declares the META
+   * but ships a different shape, `unwrapSyntheticObject` will
+   * simply not unwrap, and the user gets back the literal payload
+   * they wrote. That degrades silently to "regular object" rather
+   * than throwing, which preserves the loose-parsing posture of the
+   * format.
+   */
+  private validateRootMetaConsistency(): void {
+    if (this.rootArrayWrapped && this.rootPrimitiveWrapped) {
+      this.errors.push(
+        `Document declares both ~META~ ${MetaTags.ROOT_ARRAY} and ~META~ ${MetaTags.ROOT_PRIMITIVE}; only one root-wrapper tag may appear.`
       );
     }
   }

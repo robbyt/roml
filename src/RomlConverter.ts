@@ -171,15 +171,23 @@ export class RomlConverter {
     // pipeline to handle the embedded quotes correctly.
     if (value.startsWith('"') || value.endsWith('"')) return true;
 
-    // Check if string ends with `{` or `[` (after trimming trailing
-    // whitespace). The lexer trims every line before matching the
-    // OBJECT_START / ARRAY_START regexes, so a value like `'open { '`
-    // would still be mis-tokenized as `OBJECT_START` after lexer
-    // trimming even though the raw value doesn't end with `{`. Use
-    // `trimEnd()` so values with trailing whitespace before the
-    // structural char are also routed through `QUOTED`.
+    // Check if string ends with a structural character that could
+    // confuse the lexer (after trimming trailing whitespace, since
+    // the lexer trims every line before matching). `{` and `[` look
+    // like OBJECT_START / ARRAY_START openers; `]` and `}` are the
+    // closing counterparts that interact with `jsonArrayMatch` and
+    // OBJECT_END / ARRAY_END detection. Routing any of them through
+    // `QUOTED` lets the existing escape pipeline carry the value
+    // safely.
     const trimmedEnd = value.trimEnd();
-    if (trimmedEnd.endsWith('{') || trimmedEnd.endsWith('[')) return true;
+    if (
+      trimmedEnd.endsWith('{') ||
+      trimmedEnd.endsWith('[') ||
+      trimmedEnd.endsWith(']') ||
+      trimmedEnd.endsWith('}')
+    ) {
+      return true;
+    }
 
     // Check if string contains newlines (would break single-line format)
     if (value.includes('\n') || value.includes('\r')) return true;
@@ -268,10 +276,22 @@ export class RomlConverter {
       processData = data as Record<string, unknown>;
     }
 
-    const documentFeatures = this.analyzeDocumentFeatures(processData);
+    const documentFeatures = this.analyzeDocumentFeatures(processData, inputType);
 
     // Build header components
     const headerLines = ['~ROML~'];
+
+    // Root-wrapping META tags. Emitted only when the encoder
+    // synthetically wrapped a non-object root; the parser uses these
+    // to license the unwrap, so a user document that happens to use
+    // the wrapper sentinel as a real key (and so emits no META) is
+    // round-tripped as an object instead of being silently
+    // unwrapped.
+    if (inputType === 'array') {
+      headerLines.push(`# ~META~ ${MetaTags.ROOT_ARRAY}`);
+    } else if (inputType === 'primitive') {
+      headerLines.push(`# ~META~ ${MetaTags.ROOT_PRIMITIVE}`);
+    }
 
     // Simplified prime META tag logic - always generate for objects with primes
     if (documentFeatures.primesDetected) {
@@ -735,10 +755,26 @@ export class RomlConverter {
   /**
    * Analyze document-level features
    */
-  private analyzeDocumentFeatures(data: Record<string, unknown>): DocumentFeatures {
+  private analyzeDocumentFeatures(
+    data: Record<string, unknown>,
+    inputType: JsonType = 'object'
+  ): DocumentFeatures {
+    // Only apply the wrapper-key short-circuit when the encoder is
+    // actually performing a synthetic wrap. For object roots that
+    // happen to contain a `__roml_items__` / `__roml_value__` key,
+    // the wrapper-key shape is a coincidence and prime detection
+    // must walk through normally.
+    const primesDetected =
+      inputType === 'object'
+        ? objectContainsPrimes(data)
+        : this.objectContainsPrimesExcludingWrapperKeys(data);
     return {
-      primesDetected: this.objectContainsPrimesExcludingWrapperKeys(data),
-      rootType: 'object', // Always object in wrapper approach
+      primesDetected,
+      // Track the actual root type (not always 'object') so
+      // line-level features can distinguish a genuine synthetic
+      // wrap from a user object that happens to use the wrapper
+      // sentinel as a key.
+      rootType: inputType,
     };
   }
 
@@ -812,8 +848,17 @@ export class RomlConverter {
     const needsQuotes =
       typeof value === 'string' && this.isAmbiguousString(value) && !(value === '' && isArrayItem);
 
+    // Suppress the prime-prefix on a wrapper-shaped key only when
+    // the encoder is in synthetic-wrap mode AND we're at the root
+    // of the document (depth 0). User objects that happen to use a
+    // wrapper sentinel as a key, or any nested use of the same
+    // shape, must not be short-circuited.
+    const isSyntheticWrapAtRoot =
+      this.isSyntheticWrapperKey(key) &&
+      nestingDepth === 0 &&
+      context?.documentFeatures.rootType !== 'object';
     return {
-      containsPrime: this.isSyntheticWrapperKey(key) ? false : containsPrime(value),
+      containsPrime: isSyntheticWrapAtRoot ? false : containsPrime(value),
       hasLargeArray,
       isNestedObject,
       keyStartsWithVowel,

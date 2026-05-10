@@ -74,13 +74,12 @@ const stressString = fc
  * Object-key arbitrary that mixes generic stress strings with a hand-
  * picked set of known ROML-trouble names.
  *
- * `__roml_items__` / `__roml_value__` are EXCLUDED on purpose: they
- * are the encoder's synthetic wrapper sentinels for top-level
- * non-object roots. A user object whose only top-level key is one of
- * those names with the matching wrapper-shape value (`{__roml_items__: [...]}`
- * or `{__roml_value__: x}`) is structurally indistinguishable from a
- * synthetically-wrapped primitive after parsing — that's a known
- * architectural collision tracked separately.
+ * Note: `__roml_items__` / `__roml_value__` are the encoder's
+ * synthetic wrapper sentinels for top-level non-object roots. After
+ * the META-tag disambiguation fix in PR #29, a user object that
+ * happens to use these as keys round-trips correctly because the
+ * encoder only emits the unwrap-licensing META tag when actually
+ * synthesising the wrap.
  */
 const stressKey = fc.oneof(
   stressString,
@@ -89,6 +88,11 @@ const stressKey = fc.oneof(
     '__EMPTY__',
     '__UNDEFINED__',
     '!warn',
+    // Synthetic-wrapper sentinels are now legitimate user keys
+    // (PR #29 added META-tag disambiguation), so include them in
+    // the stress arbitrary to exercise the wrapper-collision case.
+    '__roml_items__',
+    '__roml_value__',
     ...SEMANTIC_KEYWORDS
   )
 );
@@ -165,10 +169,11 @@ describe('Round-trip property tests (fast-check)', () => {
  * inside an otherwise-fine document is also skipped.
  *
  * Known limitations (each is a follow-up PR candidate):
- *  1. Synthetic-wrapper collision: a single-key object whose key is
- *     `__roml_items__` (array value) or `__roml_value__` (any value)
- *     is structurally indistinguishable from a wrap of a non-object
- *     root after parsing.
+ *  1. (Resolved — encoder emits `# ~META~ ROOT_ARRAY` /
+ *     `# ~META~ ROOT_PRIMITIVE` for synthetic wraps; parser only
+ *     unwraps when the matching META tag is present, so user
+ *     objects that use the wrapper sentinel as a key round-trip
+ *     intact.)
  *  2. (Resolved — `needsQuotedKey` now flags `\`-containing keys so
  *     the encoder routes them through QUOTED. Number kept for
  *     stable cross-referencing in this docstring.)
@@ -277,13 +282,8 @@ function hasKnownLimitation(input: unknown): boolean {
   }
 
   const obj = input as Record<string, unknown>;
-  const keys = Object.keys(obj);
 
-  // (1) Synthetic-wrapper collision.
-  if (keys.length === 1) {
-    if (keys[0] === '__roml_items__' && Array.isArray(obj.__roml_items__)) return true;
-    if (keys[0] === '__roml_value__') return true;
-  }
+  // (1) resolved; no constraint needed.
 
   for (const [key, value] of Object.entries(obj)) {
     // (2) Backslash in key — resolved; no constraint needed.

@@ -7,6 +7,21 @@
  */
 export enum MetaTags {
   SIEVE_OF_ERATOSTHENES_INVOKED = 'SIEVE_OF_ERATOSTHENES_INVOKED',
+  /**
+   * Marks a document whose JSON root was an array. The encoder wraps
+   * such roots as `{__roml_items__: [...]}` for downstream encoding,
+   * and this META tag is what tells the parser the wrap is synthetic
+   * (so a user document with a real `__roml_items__` key as its only
+   * top-level key does not get unwrapped).
+   */
+  ROOT_ARRAY = 'ROOT_ARRAY',
+  /**
+   * Marks a document whose JSON root was a primitive (string, number,
+   * boolean, null). The encoder wraps such roots as
+   * `{__roml_value__: x}`. As with ROOT_ARRAY, the META tag is what
+   * licenses the parser to unwrap.
+   */
+  ROOT_PRIMITIVE = 'ROOT_PRIMITIVE',
 }
 
 /**
