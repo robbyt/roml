@@ -211,9 +211,15 @@ describe('Round-trip property tests (fast-check)', () => {
  *     encoder uses `JSON.stringify` (which escapes the quote as
  *     `\"`) but the parser slices off the outer quotes without
  *     unescaping, so a single `"` round-trips as `\"`.
- * 12. PIPES style array (or KV) containing `|` in items: the encoder
- *     doesn't escape `|`, so item bytes collide with the `||`
- *     separator.
+ * 12. (Resolved for arrays — the PIPES array emitter now quotes
+ *     items containing `|`, and the lexer's PIPES content split is
+ *     quote-aware via `splitOutsideQuotes`, so `||` inside a quoted
+ *     item is preserved as part of the item. Non-array `|`-bearing
+ *     string values under COLLECTIONS-category keys are still
+ *     constrained out under #13; non-array `|`-bearing values under
+ *     non-COLLECTIONS keys round-trip through the existing
+ *     unquoted-style paths because their separators don't include
+ *     `|`.)
  * 13. COLLECTIONS-category key (`tags`, `items`, `list`, ...) with a
  *     non-array value: the encoder routes these through
  *     `SYNTAX_STYLES.PIPES` which renders `||key||value||` —
@@ -222,7 +228,9 @@ describe('Round-trip property tests (fast-check)', () => {
  *     family as limitation 7.
  * 14. Array items containing separator characters that aren't
  *     escaped by the corresponding inline style — `:` (COLON_DELIM),
- *     `|` (PIPES), `>` (BRACKETS, see #9), `"` (JSON_STYLE, see #11).
+ *     `>` (BRACKETS, see #9), `"` (JSON_STYLE, see #11). `|` (PIPES)
+ *     was here before fix #12 landed; it now round-trips via the
+ *     QUOTED-inside-PIPES path and is no longer screened.
  *     The encoder picks the style by hashing the key, so we don't
  *     know which one will be used; conservatively skip any array
  *     whose items contain any of those characters.
@@ -230,6 +238,21 @@ describe('Round-trip property tests (fast-check)', () => {
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
  *     `_=__NULL__` that the lexer's UNDERSCORE parser claims first.
+ * 16. Pre-existing unescape-ordering bug surfaced by relaxed #12/#14
+ *     constraints: a key containing the literal 2-char sequences
+ *     `\n`, `\r`, or `\t` (backslash followed by `n`/`r`/`t`) is
+ *     routed through the QUOTED-key escape pipeline. The encoder's
+ *     `escapeForRoml` doubles the leading `\` to `\\`, but the
+ *     lexer's chained-replace `unescapeStringValue` matches `\\n` /
+ *     `\\r` / `\\t` (3 bytes — the doubled backslash plus the
+ *     letter) as the 2-byte escaped form `\n` / `\r` / `\t` BEFORE
+ *     the final `\\\\ -> \\` step reverses the doubled backslash,
+ *     so the literal mangles into a `\` + control-char pair on
+ *     round-trip. Same family of issue as the limitation #11
+ *     JSON_STYLE escape mismatch; both want a single-pass walker.
+ *     This is independent of the limitation #12 fix; the relaxed
+ *     constraints just shifted the seed sequence so fast-check
+ *     happens to surface this case now.
  */
 const COLLECTION_KEYS = new Set([
   'tags',
@@ -245,7 +268,11 @@ const COLLECTION_KEYS = new Set([
  * Per-item screens that apply to any array (whether the array is the
  * top-level input or stored under an object key). Limitations
  * referenced: 3 (single-element), 9 (`>` in items), 11 (`"`/`\` in
- * items), 12/14 (separator collisions in items).
+ * items), 14 (other inline-style separator collisions). `|` is no
+ * longer in this screen — limitation #12 is resolved via the
+ * PIPES array emitter quoting `|`-bearing items locally (not via
+ * `isAmbiguousString`) plus the lexer's quote-aware PIPES content
+ * split (`splitOutsideQuotes`).
  */
 function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   // (3) Single-element primitive arrays.
@@ -261,7 +288,7 @@ function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   if (
     arr.some(
       (v) =>
-        typeof v === 'string' && /[:|>"\\]/.test(v)
+        typeof v === 'string' && /[:>"\\]/.test(v)
     )
   ) {
     return true;
@@ -326,8 +353,12 @@ function hasKnownLimitation(input: unknown): boolean {
       return true;
     }
 
-    // (12) `|` in a scalar string value (PIPES separator collision).
-    if (typeof value === 'string' && value.includes('|')) return true;
+    // (12) Resolved for arrays — see top-level docstring. Scalar
+    //      `|`-bearing values under non-COLLECTIONS keys already
+    //      round-trip via the existing FAKE_COMMENT/EQUALS/etc.
+    //      paths whose separators don't include `|`. Scalar
+    //      `|`-bearing values under COLLECTIONS keys are still
+    //      constrained out by (13) below.
 
     // (13) COLLECTIONS-category key with a non-array value — PIPES
     //      KEY_VALUE shape collides with PIPES primitive-array shape.
@@ -336,13 +367,14 @@ function hasKnownLimitation(input: unknown): boolean {
     }
 
     // (14) Array items containing un-escaped inline-array separator
-    //      chars: `:`, `|`, `>`, `"` (already covered by #11 but
-    //      restated here for completeness with the others).
+    //      chars: `:`, `>`, `"` (already covered by #11 but restated
+    //      here for completeness with the others). `|` was here
+    //      before #12 was fixed.
     if (
       Array.isArray(value) &&
       value.some(
         (v) =>
-          typeof v === 'string' && /[:|>"]/.test(v)
+          typeof v === 'string' && /[:>"]/.test(v)
       )
     ) {
       return true;
@@ -355,6 +387,13 @@ function hasKnownLimitation(input: unknown): boolean {
     ) {
       return true;
     }
+
+    // (16) Pre-existing unescape-ordering bug — see top-level
+    //      docstring. Until `unescapeStringValue` is rewritten as a
+    //      single-pass walker, any key containing literal `\n`,
+    //      `\r`, or `\t` (the 2-char sequence, not the control
+    //      char) mangles on round-trip through the QUOTED-key path.
+    if (/\\[nrt]/.test(key)) return true;
 
     if (hasKnownLimitation(value)) return true;
   }

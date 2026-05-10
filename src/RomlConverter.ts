@@ -464,8 +464,16 @@ export class RomlConverter {
             if (item === null) return '__NULL__';
             if (item === '') return '__EMPTY__';
             if (item === undefined) return '__UNDEFINED__';
-            // Quote ambiguous strings in arrays
-            if (typeof item === 'string' && this.isAmbiguousString(item)) {
+            // Quote ambiguous strings in arrays. `|` is a PIPES-only
+            // collision (the `||` separator), so it's checked here
+            // rather than in `isAmbiguousString` — keeping it local
+            // avoids forcing scalar `|`-bearing values through the
+            // QUOTED escape pipeline (which would expose a separate
+            // unescape-ordering quirk for literal `\r`/`\n`/`\t`).
+            if (
+              typeof item === 'string' &&
+              (this.isAmbiguousString(item) || item.includes('|'))
+            ) {
               return `"${escapeStringValue(item)}"`;
             }
             return String(item);
