@@ -450,6 +450,60 @@ export class RomlLexer {
   }
 
   /**
+   * Split `value` on `separator` (single- or multi-char) outside of
+   * `"…"` regions, with the same quote/escape tracking as
+   * `findSeparatorOutsideQuotes`. Used by the PIPES branch so a
+   * quoted item like `"a||b"` is preserved as one element rather
+   * than being split at the inner `||`.
+   *
+   * Quote-awareness gives us the only viable resolution for fuzz
+   * limitation #12: `|` in a PIPES item can't be re-mapped (the
+   * encoder doesn't escape it cheaply because every byte in PIPES
+   * has structural meaning), so the encoder routes any `|`-bearing
+   * value through QUOTED-inside-PIPES, and the split needs to look
+   * past those quotes.
+   */
+  private splitOutsideQuotes(value: string, separator: string): string[] {
+    const result: string[] = [];
+    let inQuotes = false;
+    let escapeNext = false;
+    let buffer = '';
+    let i = 0;
+    while (i < value.length) {
+      const char = value[i];
+
+      if (escapeNext) {
+        buffer += char;
+        escapeNext = false;
+        i++;
+        continue;
+      }
+      if (char === '\\') {
+        buffer += char;
+        escapeNext = true;
+        i++;
+        continue;
+      }
+      if (char === '"') {
+        buffer += char;
+        inQuotes = !inQuotes;
+        i++;
+        continue;
+      }
+      if (!inQuotes && value.startsWith(separator, i)) {
+        result.push(buffer);
+        buffer = '';
+        i += separator.length;
+        continue;
+      }
+      buffer += char;
+      i++;
+    }
+    result.push(buffer);
+    return result;
+  }
+
+  /**
    * Check if this colon is part of a colon-delimited array
    */
   private isColonArray(line: string, firstColonPos: number): boolean {
@@ -717,9 +771,17 @@ export class RomlLexer {
     if (pipeArrayMatch) {
       const k = extractKey(pipeArrayMatch[1]);
       const value = pipeArrayMatch[2];
-      if (value.includes('||')) {
-        const items = value
-          .split('||')
+
+      // Quote-aware split (limitation #12): a `|`-bearing value is
+      // emitted by the encoder as `"…"` so the bytes survive the
+      // round-trip; splitting plain on `||` would mis-count items
+      // when an item contains `||` inside its quoted form.
+      const splitItems = this.splitOutsideQuotes(value, '||');
+
+      // Multi-item array shape — `value` carries a `||` outside
+      // quotes, so the split returned more than one element.
+      if (splitItems.length > 1) {
+        const items = splitItems
           .filter((item) => item.trim())
           .map((item) => {
             // Check if item is quoted. `(.*)` so `""` parses as ''.
@@ -731,26 +793,29 @@ export class RomlLexer {
             return this.parseSpecialValue(item);
           });
         return [k.key, items, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
-      } else {
-        // Handle empty array case: key||||
-        if (value === '') {
-          return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
-        }
-
-        // Check if single value is quoted. `(.*)` so `""` parses
-        // as the empty string rather than the literal 2-char `""`.
-        const quotedMatch = value.match(/^"(.*)"$/);
-        const singleValue = quotedMatch
-          ? unescapeStringValue(quotedMatch[1])
-          : this.parseSpecialValue(value);
-
-        // For wrapper keys, single values should still be arrays
-        if (k.key === SYNTHETIC_ITEMS_KEY || k.key === SYNTHETIC_VALUE_KEY) {
-          return [k.key, [singleValue], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
-        }
-
-        return [k.key, singleValue, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
       }
+
+      // Single-item or empty shape (`splitItems` has exactly one
+      // element, equal to `value`).
+
+      // Empty array case: `key||||` — `value` is the empty string.
+      if (value === '') {
+        return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+      }
+
+      // Check if single value is quoted. `(.*)` so `""` parses
+      // as the empty string rather than the literal 2-char `""`.
+      const quotedMatch = value.match(/^"(.*)"$/);
+      const singleValue = quotedMatch
+        ? unescapeStringValue(quotedMatch[1])
+        : this.parseSpecialValue(value);
+
+      // For wrapper keys, single values should still be arrays
+      if (k.key === SYNTHETIC_ITEMS_KEY || k.key === SYNTHETIC_VALUE_KEY) {
+        return [k.key, [singleValue], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+      }
+
+      return [k.key, singleValue, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Parse JSON-style arrays: key["item1",7,"true",true]
