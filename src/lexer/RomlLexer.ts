@@ -350,14 +350,24 @@ export class RomlLexer {
   private analyzeLineStructure(
     line: string
   ): { style: string; keyPart: string; valuePart: string } | null {
-    // First check for quoted pattern (special case)
-    const quotedMatch = line.match(/^(.+?)="(.*)"$/);
-    if (quotedMatch) {
-      return {
-        style: 'QUOTED',
-        keyPart: quotedMatch[1],
-        valuePart: quotedMatch[2],
-      };
+    // First check for QUOTED pattern: `key="value"`.
+    //
+    // The naïve regex `^(.+?)="(.*)"$` lazy-finds the FIRST `="`
+    // anywhere in the line, which mis-splits a quoted key
+    // containing `="` (e.g. `"u="=" "` for `{"u=": " "}` —
+    // group 1 captures `"u` and the lexer re-parses it as
+    // literal key `"u`). Use `findSeparatorOutsideQuotes` for
+    // the `="` boundary so the structural separator lives
+    // outside the quoted-key region. Same shape family as the
+    // BRACKETS / JSON_STYLE / PIPES quoted-key fixes from PRs
+    // #37 and #39. Fuzz-surfaced at numRuns=1000.
+    if (line.endsWith('"')) {
+      const eqIdx = this.findSeparatorOutsideQuotes(line, '="');
+      if (eqIdx > 0) {
+        const keyPart = line.slice(0, eqIdx);
+        const valuePart = line.slice(eqIdx + 2, -1); // skip `="` and trailing `"`
+        return { style: 'QUOTED', keyPart, valuePart };
+      }
     }
 
     // Check for AMPERSAND style FIRST: &key&value (handles quoted keys properly)
@@ -390,8 +400,6 @@ export class RomlLexer {
     let earliestStyle = '';
 
     for (const { char, style } of separators) {
-      if (char === '=' && quotedMatch) continue; // Already handled above
-
       const separatorPos = this.findSeparatorOutsideQuotes(line, char);
       if (separatorPos !== -1) {
         // Special handling for colon to avoid colon arrays
@@ -868,7 +876,24 @@ export class RomlLexer {
     // the BRACKETS/JSON_STYLE quoted-key fixes in PR #37).
     if (line.endsWith('||')) {
       const openIdx = this.findSeparatorOutsideQuotes(line, '||');
+      // Reject if an earlier KV separator (`=`, `:`, etc.) outside
+      // quotes appears before the candidate `||` — otherwise a line
+      // like `" "=||` (EQUALS KV with `||` as the value) gets stolen
+      // by PIPES because of the trailing `||`. Same precedence-by-
+      // rejection pattern as the COLON-array gate below.
+      // Fuzz-surfaced at numRuns=1000.
+      const pipeEarlySeparators = ['=', ':', '~', '#', '%', '$', '^', '+', '&'];
+      let pipeBlockedByEarlier = false;
       if (openIdx > 0) {
+        for (const sep of pipeEarlySeparators) {
+          const sepPos = this.findSeparatorOutsideQuotes(line, sep);
+          if (sepPos !== -1 && sepPos < openIdx) {
+            pipeBlockedByEarlier = true;
+            break;
+          }
+        }
+      }
+      if (openIdx > 0 && !pipeBlockedByEarlier) {
         const k = extractKey(line.slice(0, openIdx));
         const value = line.slice(openIdx + 2, -2);
 
@@ -998,13 +1023,17 @@ export class RomlLexer {
     // is unchanged: the value-part must contain at least one more `:`.
     //
     // Additionally, only fire when no earlier KEY_VALUE separator
-    // (`=`, `~`, `#`, `%`, `$`, `^`, `+`) appears outside quotes
+    // (`=`, `~`, `#`, `%`, `$`, `^`, `+`, `&`) appears outside quotes
     // before the first `:`. Otherwise an EQUALS-style string value
-    // like `y=a:b:c` would be misread as a 2-item colon-array.
+    // like `y=a:b:c` would be misread as a 2-item colon-array. `&`
+    // is the AMPERSAND-style marker — for a line like `&token&::`
+    // the encoder intended `{token: "::"}` (TECHNICAL key → AMPERSAND
+    // KV with a `::` scalar), but a plain `:` scan would re-read it
+    // as a `&token&`-keyed COLON-array. Fuzz-surfaced at numRuns=1000.
     const firstColonPos = this.findSeparatorOutsideQuotes(line, ':');
     const colonRemainder = firstColonPos !== -1 ? line.slice(firstColonPos + 1) : '';
     if (firstColonPos !== -1 && colonRemainder.includes(':')) {
-      const earlierSeparators = ['=', '~', '#', '%', '$', '^', '+'];
+      const earlierSeparators = ['=', '~', '#', '%', '$', '^', '+', '&'];
       let hasEarlierSeparator = false;
       for (const sep of earlierSeparators) {
         const sepPos = this.findSeparatorOutsideQuotes(line, sep);
