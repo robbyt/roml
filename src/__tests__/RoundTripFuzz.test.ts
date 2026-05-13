@@ -105,7 +105,8 @@ const stressKey = fc.oneof(
 // `hasKnownLimitation` screen went empty — at that point the
 // only thing left worth doing is to exercise the round-trip at
 // higher volume. Each property block runs 1000 samples,
-// 4 properties, so ~4000 round-trips total. CI cost is ~30–60s.
+// 4 properties, so ~4000 round-trips total. If CI time becomes
+// an issue, drop `numRuns` back to 100 (or split this file).
 const FUZZ_OPTS: fc.Parameters<unknown> = { seed: 20260507, numRuns: 1000 };
 
 describe('Round-trip property tests (fast-check)', () => {
