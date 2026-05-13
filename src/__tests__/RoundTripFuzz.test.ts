@@ -98,11 +98,15 @@ const stressKey = fc.oneof(
 );
 
 // Pin the fast-check seed so the suite is deterministic — random
-// shrinking surfaces shape after shape, and we want a stable baseline
-// rather than a flaky test that depends on the wall clock. A new seed
-// can be wired in (or this constant removed) once the documented
-// limitations have follow-up fixes.
-const FUZZ_OPTS: fc.Parameters<unknown> = { seed: 20260507, numRuns: 100 };
+// shrinking surfaces shape after shape, and we want a stable
+// baseline rather than a flaky test that depends on the wall
+// clock. The `numRuns` was bumped from 100 to 1000 after the
+// inline-array limitation series closed (PR #40) and the
+// `hasKnownLimitation` screen went empty — at that point the
+// only thing left worth doing is to exercise the round-trip at
+// higher volume. Each property block runs 1000 samples,
+// 4 properties, so ~4000 round-trips total. CI cost is ~30–60s.
+const FUZZ_OPTS: fc.Parameters<unknown> = { seed: 20260507, numRuns: 1000 };
 
 describe('Round-trip property tests (fast-check)', () => {
   it('round-trips arbitrary JSON object roots', () => {
