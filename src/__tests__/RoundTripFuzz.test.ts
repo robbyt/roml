@@ -185,9 +185,11 @@ describe('Round-trip property tests (fast-check)', () => {
  *     PIPES filter already drops empty items; JSON_STYLE's
  *     walker already drops empty `current`; COLON_DELIM
  *     learned to drop a single trailing empty token.)
- *  4. Empty arrays in BRACKETS / JSON_STYLE / COLON_DELIM styles —
- *     only PIPES emits a recoverable empty-array form; the other
- *     three reduce to a key-only line that the lexer drops.
+ *  4. (Resolved — `convertArray` now forces PIPES regardless of
+ *     `selectArrayStyle`'s hash output when the array is empty.
+ *     PIPES is the only inline style with a recoverable empty
+ *     form (`key||||`). Mirrors the synthetic-wrapper-key
+ *     shortcut already in `selectArrayStyle`.)
  *  5. (Resolved — single-bracket parsing now lives only in
  *     `analyzeLineStructure`'s fallback path, runs after the regular
  *     separator scan, and uses `findSeparatorOutsideQuotes` for the
@@ -269,18 +271,18 @@ describe('Round-trip property tests (fast-check)', () => {
  * `isAmbiguousString`) plus the lexer's quote-aware PIPES content
  * split (`splitOutsideQuotes`).
  */
-function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
-  // (3) Resolved — every inline-array style now emits an arity-1
-  // marker (PIPES trailing `||`, JSON_STYLE trailing `,`,
-  // COLON_DELIM trailing `:`, BRACKETS' pre-existing `<>`), so
-  // single-element primitive arrays round-trip without unwrapping
-  // to scalar.
-  // (4) Empty arrays of any depth (still open).
-  if (arr.length === 0) return true;
-  // (14) Resolved — every inline-array separator-char now
-  // round-trips: `|` (#12, #36), `\` (#11), `"` (#36 PIPES,
-  // #37 BRACKETS, this PR for COLON_DELIM), `>`/`<` (#9), `:`
-  // (this PR). The ledger is empty.
+function arrayItemsHaveKnownLimitation(_arr: unknown[]): boolean {
+  // All array-item-shape limitations are resolved:
+  //   #3  arity-1 markers per style (PIPES `||`, JSON_STYLE `,`,
+  //       COLON_DELIM `:`, BRACKETS' pre-existing `<>`).
+  //   #4  empty arrays forced through PIPES (this PR).
+  //   #9  BRACKETS `>`/`<` quoted.
+  //   #11 JSON_STYLE escape via `JSON.parse`.
+  //   #12 PIPES `|`/`||` via quote-aware split.
+  //   #14 every inline-array separator-char (`:`, `>`, `"`, `\`,
+  //       `|`) round-trips.
+  // Function kept (rather than inlined `return false`) so future
+  // limitations can re-add screens here without restructuring.
   return false;
 }
 
@@ -307,10 +309,11 @@ function hasKnownLimitation(input: unknown): boolean {
     //      style emits an arity-1 marker; single-element primitive
     //      arrays round-trip cleanly.
 
-    // (4) Empty arrays of any depth — the encoder's hash-based array
-    // style selection picks BRACKETS / JSON_STYLE / COLON_DELIM about
-    // 75% of the time, all of which lose empty-array fidelity.
-    if (Array.isArray(value) && value.length === 0) return true;
+    // (4) Resolved — empty arrays now force PIPES in
+    //      `convertArray` regardless of the key's hash, since only
+    //      PIPES has a recoverable empty-form (`key||||`). Same
+    //      shortcut pattern as the synthetic-wrapper-key path in
+    //      `selectArrayStyle`.
 
     // (5) and (6) resolved; no constraints needed.
 

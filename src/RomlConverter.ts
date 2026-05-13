@@ -447,8 +447,18 @@ export class RomlConverter {
       };
     }
 
-    // For primitive arrays, they take only one line
-    const arrayStyle = this.selectArrayStyle(key, context);
+    // For primitive arrays, they take only one line.
+    //
+    // Empty arrays force PIPES regardless of hash: only PIPES has
+    // a recoverable empty-form (`key||||`) that the lexer
+    // round-trips as `[]`. BRACKETS would emit a bare `key`, the
+    // JSON_STYLE `key[]` shape needs a `,` in content to match,
+    // and COLON_DELIM's `key:` shape is indistinguishable from a
+    // scalar KV-COLON with empty value. Same shortcut pattern as
+    // the synthetic-wrapper-key path in `selectArrayStyle`.
+    // Limitation #4.
+    const arrayStyle =
+      array.length === 0 ? 'PIPES' : this.selectArrayStyle(key, context);
     const lineFeatures = this.analyzeLineFeatures(key, array, context);
     const prefix = lineFeatures.containsPrime ? '!' : '';
     // Quote the key if needed so the lexer can recover it cleanly.
@@ -711,11 +721,23 @@ export class RomlConverter {
     // COLLECTIONS keys go through `selectArrayStyle`, not this
     // function, so they keep their existing PIPES-or-other routing.
     const semanticStyle = this.getSemanticStyle(key);
+    // The lexer's `analyzeLineStructure` does a separator scan
+    // before the BRACKETS fallback, so a STATUS-keyed scalar
+    // (which routes to BRACKETS) containing one of `=:~#%$^+`
+    // would be mis-classified as an EQUALS-family KV line
+    // (e.g. `working<^>` reads as `working<` = `>`). Skip the
+    // BRACKETS override in that case and let the value-type
+    // branches pick a non-BRACKETS shape that the lexer's
+    // first-separator-wins scan handles correctly. Same shape
+    // family as the COLLECTIONS-PIPES skip in #13.
+    const valueHasKVSeparator =
+      typeof value === 'string' && /[=:~#%$^+]/.test(value);
     if (
       semanticStyle &&
       !isEvenLine &&
       valueType === 'string' &&
-      semanticStyle !== 'PIPES'
+      semanticStyle !== 'PIPES' &&
+      !(semanticStyle === 'BRACKETS' && valueHasKVSeparator)
     ) {
       return SYNTAX_STYLES[semanticStyle];
     }
