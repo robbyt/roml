@@ -394,18 +394,38 @@ export class RomlParser {
       }
     };
 
+    // Use `Object.defineProperty` rather than `result[key] = value`
+    // so user-supplied keys like `__proto__` become own properties
+    // of `result` instead of triggering the inherited
+    // prototype-setter (which would silently drop the assignment,
+    // since `__proto__`'s setter rejects non-object values). Same
+    // concern for `constructor` etc., but `__proto__` is the only
+    // one that actively swallows the write. `Object.defineProperty`
+    // bypasses the prototype chain entirely and creates a true
+    // own property regardless of key name. (Fuzz-surfaced when the
+    // #4 empty-array screen was dropped — input `{"":{"__proto__":
+    // " "}}` was round-tripping as `{"":{}}`.)
+    const setKey = (key: string, value: unknown) => {
+      Object.defineProperty(result, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    };
+
     for (const prop of node.properties) {
       recordKey(prop.key, prop.lineNumber);
-      result[prop.key] = prop.value;
+      setKey(prop.key, prop.value);
     }
 
     for (const child of node.children) {
       if (child.type === 'object') {
         recordKey(child.key!, child.lineNumber);
-        result[child.key!] = this.objectNodeToData(child);
+        setKey(child.key!, this.objectNodeToData(child));
       } else if (child.type === 'array') {
         recordKey(child.key, child.lineNumber);
-        result[child.key] = this.arrayNodeToData(child);
+        setKey(child.key, this.arrayNodeToData(child));
       }
     }
 
