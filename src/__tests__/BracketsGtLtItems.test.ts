@@ -79,6 +79,29 @@ describe('BRACKETS items containing `>` or `<` (limitation #9)', () => {
     });
   });
 
+  describe('items with bare `"` (Copilot review on this PR)', () => {
+    // The lexer walker tracks quote state, so a bare middle-`"`
+    // in an item (not caught by `isAmbiguousString`, which only
+    // flags leading/trailing `"`) would put the walker into
+    // `inQuotes` and prevent the closing `>` from ending the
+    // item. Encoder must quote any `"`-bearing item.
+
+    it('round-trips a mid-string `"`', () => {
+      const input = { elements: ['a"b', 'c'] };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('round-trips multiple `"`s in one item', () => {
+      const input = { elements: ['a"b"c', 'd'] };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('round-trips a lone-`"` item (also worked pre-fix via leading/trailing check)', () => {
+      const input = { elements: ['"', 'y'] };
+      expect(roundTrip(input)).toEqual(input);
+    });
+  });
+
   describe('escape composition: `>` combined with other tricky bytes', () => {
     it('round-trips `>` plus `"`', () => {
       const input = { elements: ['a">b', 'c'] };
