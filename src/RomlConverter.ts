@@ -483,8 +483,16 @@ export class RomlConverter {
             return String(item);
           })
           .join('||');
+        // Single-element arrays append an extra `||` arity marker
+        // so the lexer's `splitOutsideQuotes` returns a 2-element
+        // list (`['only', '']`) and the existing empty-item filter
+        // gives back `['only']`. Without this the line is
+        // structurally identical to a scalar emission and the
+        // lexer's single-item branch unwraps to a scalar
+        // (limitation #3). Mirrors BRACKETS' `<>` arity-1 marker.
+        const finalPipeItems = array.length === 1 ? `${pipeItems}||` : pipeItems;
         return {
-          result: `${indent}${prefix}${formattedKey}||${pipeItems}||`,
+          result: `${indent}${prefix}${formattedKey}||${finalPipeItems}||`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -537,8 +545,19 @@ export class RomlConverter {
           // Numbers, booleans, etc. are not quoted
           return String(item);
         });
+        // Single-element arrays append a trailing `,` arity marker
+        // so the lexer's `jsonArrayMatch[2].includes(',')` gate fires
+        // and the comma-walk treats it as a 1-element array (the
+        // empty trailing item is dropped by the existing
+        // `if (trimmed) ...push` check). Without this, the line is
+        // `key[item]` which the lexer drops (no comma) — limitation
+        // #3. Mirrors BRACKETS' `<>` arity-1 marker. Technically not
+        // valid JSON (trailing comma) but ROML's wire format isn't
+        // JSON anyway.
+        const jsonContent = jsonItems.join(',');
+        const finalJsonContent = array.length === 1 ? `${jsonContent},` : jsonContent;
         return {
-          result: `${indent}${prefix}${formattedKey}[${jsonItems.join(',')}]`,
+          result: `${indent}${prefix}${formattedKey}[${finalJsonContent}]`,
           nextLineNumber: context.lineNumber + 1,
         };
 
@@ -565,8 +584,18 @@ export class RomlConverter {
           }
           return String(item);
         });
+        // Single-element arrays append a trailing `:` arity marker
+        // so the lexer's COLON_DELIM branch fires (its gate requires
+        // `colonRemainder.includes(':')`) and the split returns a
+        // 2-element list (`['only', '']`). The lexer drops the
+        // trailing empty to recover `['only']`. Without this the
+        // line is `key:item` which the lexer reads as a scalar
+        // KV-COLON — limitation #3. Mirrors BRACKETS' `<>` arity-1
+        // marker.
+        const colonContent = colonItems.join(':');
+        const finalColonContent = array.length === 1 ? `${colonContent}:` : colonContent;
         return {
-          result: `${indent}${prefix}${formattedKey}:${colonItems.join(':')}`,
+          result: `${indent}${prefix}${formattedKey}:${finalColonContent}`,
           nextLineNumber: context.lineNumber + 1,
         };
 

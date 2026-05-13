@@ -177,9 +177,14 @@ describe('Round-trip property tests (fast-check)', () => {
  *  2. (Resolved — `needsQuotedKey` now flags `\`-containing keys so
  *     the encoder routes them through QUOTED. Number kept for
  *     stable cross-referencing in this docstring.)
- *  3. Single-element primitive arrays — `key||x||` is structurally
- *     ambiguous with scalar `key||x||` in PIPES / JSON / COLON_DELIM
- *     styles. Only BRACKETS appends a `<>` marker for arity-1.
+ *  3. (Resolved — every inline-array style emits a trailing-
+ *     separator arity-1 marker (PIPES trailing `||`, JSON_STYLE
+ *     trailing `,`, COLON_DELIM trailing `:`, BRACKETS'
+ *     pre-existing `<>`). Single-element primitive arrays now
+ *     round-trip without unwrapping to scalar. The lexer's
+ *     PIPES filter already drops empty items; JSON_STYLE's
+ *     walker already drops empty `current`; COLON_DELIM
+ *     learned to drop a single trailing empty token.)
  *  4. Empty arrays in BRACKETS / JSON_STYLE / COLON_DELIM styles —
  *     only PIPES emits a recoverable empty-array form; the other
  *     three reduce to a key-only line that the lexer drops.
@@ -265,14 +270,12 @@ describe('Round-trip property tests (fast-check)', () => {
  * split (`splitOutsideQuotes`).
  */
 function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
-  // (3) Single-element primitive arrays.
-  if (
-    arr.length === 1 &&
-    arr.every((v) => v === null || typeof v !== 'object')
-  ) {
-    return true;
-  }
-  // (4) Empty arrays of any depth.
+  // (3) Resolved — every inline-array style now emits an arity-1
+  // marker (PIPES trailing `||`, JSON_STYLE trailing `,`,
+  // COLON_DELIM trailing `:`, BRACKETS' pre-existing `<>`), so
+  // single-element primitive arrays round-trip without unwrapping
+  // to scalar.
+  // (4) Empty arrays of any depth (still open).
   if (arr.length === 0) return true;
   // (14) Resolved — every inline-array separator-char now
   // round-trips: `|` (#12, #36), `\` (#11), `"` (#36 PIPES,
@@ -300,14 +303,9 @@ function hasKnownLimitation(input: unknown): boolean {
   for (const [key, value] of Object.entries(obj)) {
     // (2) Backslash in key — resolved; no constraint needed.
 
-    // (3) Single-element primitive arrays.
-    if (
-      Array.isArray(value) &&
-      value.length === 1 &&
-      value.every((v) => v === null || typeof v !== 'object')
-    ) {
-      return true;
-    }
+    // (3) Resolved — see top-level docstring. Every inline-array
+    //      style emits an arity-1 marker; single-element primitive
+    //      arrays round-trip cleanly.
 
     // (4) Empty arrays of any depth — the encoder's hash-based array
     // style selection picks BRACKETS / JSON_STYLE / COLON_DELIM about
