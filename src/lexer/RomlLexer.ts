@@ -1005,7 +1005,17 @@ export class RomlLexer {
         // `:`-bearing item is emitted by the encoder as `"…"` so
         // its bytes survive the round-trip; plain split on `:`
         // would shred items containing `:` like `"a:b"` into two.
-        const items = this.splitOutsideQuotes(colonRemainder, ':').map((item) => {
+        let rawItems = this.splitOutsideQuotes(colonRemainder, ':');
+        // Drop a single trailing empty token, the arity-1 marker
+        // emitted by the encoder so `key:item` (which the lexer
+        // would otherwise treat as a scalar KV) instead reads as
+        // `key:item:` → `['item', '']` → `['item']` (limitation
+        // #3). Empty-string user items always emit as `__EMPTY__`,
+        // never as bare empty, so this can only be the marker.
+        if (rawItems.length >= 2 && rawItems[rawItems.length - 1] === '') {
+          rawItems = rawItems.slice(0, -1);
+        }
+        const items = rawItems.map((item) => {
           // Check if item is quoted (can be empty)
           const quotedMatch = item.match(/^"(.*)"$/);
           if (quotedMatch) {
