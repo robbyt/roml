@@ -231,13 +231,13 @@ describe('Round-trip property tests (fast-check)', () => {
  *     through to the value-type branches and pick a non-PIPES
  *     KV style. Array values under those keys still go through
  *     `selectArrayStyle` and keep their existing routing.)
- * 14. Array items containing separator characters that aren't
- *     escaped by the corresponding inline style — only `:`
- *     (COLON_DELIM) remains. `|` was resolved by #12,
- *     `\` by #11, `"` by the #14-residual PIPES fix, `>` by #9.
- *     The encoder picks the style by hashing the key, so the
- *     screen stays conservative until the COLON_DELIM `:` case
- *     is fixed (last item on the inline-array escape ledger).
+ * 14. (Resolved — every inline-array separator char now round-
+ *     trips through its style's QUOTED escape pipeline plus a
+ *     quote-aware lexer split. `|` (PIPES, #12+#36),
+ *     `\`/`"` (JSON_STYLE, #11), `"` (PIPES, #36; BRACKETS, #37;
+ *     COLON_DELIM, this PR), `>`/`<` (BRACKETS, #9), `:`
+ *     (COLON_DELIM, this PR). The inline-array escape ledger is
+ *     empty.)
  * 15. Underscore-bounded line collision: a key that starts/ends with
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
@@ -274,17 +274,10 @@ function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   }
   // (4) Empty arrays of any depth.
   if (arr.length === 0) return true;
-  // (14) Items containing un-escaped separator chars. Only `:`
-  // (COLON_DELIM) remains. `\` was resolved by #11, `"` by the
-  // #14-residual PIPES bare-`"` fix, `>` by #9.
-  if (
-    arr.some(
-      (v) =>
-        typeof v === 'string' && /[:]/.test(v)
-    )
-  ) {
-    return true;
-  }
+  // (14) Resolved — every inline-array separator-char now
+  // round-trips: `|` (#12, #36), `\` (#11), `"` (#36 PIPES,
+  // #37 BRACKETS, this PR for COLON_DELIM), `>`/`<` (#9), `:`
+  // (this PR). The ledger is empty.
   return false;
 }
 
@@ -351,19 +344,10 @@ function hasKnownLimitation(input: unknown): boolean {
     //      under a COLLECTIONS key picks a non-PIPES KV style and
     //      round-trips cleanly.
 
-    // (14) Array items containing un-escaped inline-array separator
-    //      chars. Only `:` (COLON_DELIM) remains. `|` was resolved
-    //      by #12, `\` by #11, `"` by the #14-residual PIPES fix,
-    //      `>` by #9.
-    if (
-      Array.isArray(value) &&
-      value.some(
-        (v) =>
-          typeof v === 'string' && /[:]/.test(v)
-      )
-    ) {
-      return true;
-    }
+    // (14) Resolved — see top-level docstring. Every
+    //      inline-array separator-char now round-trips through
+    //      its style's QUOTED escape pipeline + quote-aware
+    //      lexer split.
 
     // (15) Underscore-bounded key + sentinel-value collision.
     if (

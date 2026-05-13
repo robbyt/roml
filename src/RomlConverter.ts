@@ -547,8 +547,20 @@ export class RomlConverter {
           if (item === null) return '__NULL__';
           if (item === '') return '__EMPTY__';
           if (item === undefined) return '__UNDEFINED__';
-          // Quote ambiguous strings in arrays
-          if (typeof item === 'string' && this.isAmbiguousString(item)) {
+          // Quote ambiguous strings in arrays. `:` is the
+          // COLON_DELIM separator; same shape as the PIPES `|`
+          // (#32), PIPES `"` (#36), and BRACKETS `>`/`<` (#37)
+          // checks — route any `:`-bearing item through the
+          // QUOTED-inside-COLON path so the lexer's quote-aware
+          // split treats it as one element (limitation #14
+          // residual). `"` is also flagged for the same
+          // splitter-quote-tracking reason as PIPES (#36).
+          if (
+            typeof item === 'string' &&
+            (this.isAmbiguousString(item) ||
+              item.includes(':') ||
+              item.includes('"'))
+          ) {
             return `"${escapeStringValue(item)}"`;
           }
           return String(item);
