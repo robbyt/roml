@@ -857,35 +857,40 @@ export class RomlLexer {
       const k = extractKey(jsonArrayMatch[1]);
       const arrayContent = jsonArrayMatch[2];
 
-      // Parse JSON-style array items
+      // Parse JSON-style array items. Track a running count of
+      // consecutive `\` bytes immediately before the cursor so we
+      // can decide in O(1) whether the next `"` is escaped (the
+      // naïve "previous byte isn't `\`" check fails on `\\"` —
+      // an escaped backslash followed by a closing quote — the
+      // previous byte is `\` but it's itself part of an escape
+      // pair). `bsRun` is incremented on `\` and reset to 0 on
+      // every other byte; a `"` is unescaped iff `bsRun` is even.
       const items: unknown[] = [];
       let current = '';
       let inQuotes = false;
       let depth = 0;
+      let bsRun = 0;
 
       for (let i = 0; i < arrayContent.length; i++) {
         const char = arrayContent[i];
 
         if (char === '"') {
-          // A `"` toggles `inQuotes` only when it's NOT escaped. The
-          // naïve check "previous byte isn't `\`" fails on `\\"`
-          // (an escaped backslash followed by a closing quote) —
-          // the previous byte is `\` but it's itself part of an
-          // escape pair. Count consecutive preceding backslashes:
-          // if even (including zero), the `"` is unescaped and
-          // toggles; if odd, it's escaped and doesn't.
-          let bsCount = 0;
-          for (let j = i - 1; j >= 0 && arrayContent[j] === '\\'; j--) bsCount++;
-          if (bsCount % 2 === 0) {
+          if (bsRun % 2 === 0) {
             inQuotes = !inQuotes;
           }
           current += char;
+          bsRun = 0;
+        } else if (char === '\\') {
+          current += char;
+          bsRun++;
         } else if (!inQuotes && char === '[') {
           depth++;
           current += char;
+          bsRun = 0;
         } else if (!inQuotes && char === ']') {
           depth--;
           current += char;
+          bsRun = 0;
         } else if (!inQuotes && char === ',' && depth === 0) {
           // End of item
           const trimmed = current.trim();
@@ -893,8 +898,10 @@ export class RomlLexer {
             items.push(this.parseJsonValue(trimmed));
           }
           current = '';
+          bsRun = 0;
         } else {
           current += char;
+          bsRun = 0;
         }
       }
 
