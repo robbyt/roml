@@ -13,15 +13,38 @@ interface ExtractedKey {
 }
 
 /**
- * Unescape string from ROML format - convert escape sequences back to actual characters
+ * Map of escape-letter to the bytes it decodes to. Used by
+ * `unescapeStringValue` to resolve each `\X` pair atomically.
+ */
+const ESCAPE_MAP: Record<string, string> = {
+  n: '\n',
+  r: '\r',
+  t: '\t',
+  '"': '"',
+  '\\': '\\',
+};
+
+/**
+ * Unescape a string from ROML's escape form.
+ *
+ * Walks the input with a single regex pass (`/\\(.)/g`) so each
+ * `\X` pair is resolved atomically — earlier versions used a
+ * chained `.replace()` pipeline whose ordering couldn't compose
+ * for the literal 2-char sequences `\n` / `\r` / `\t`: the
+ * `\\n` → newline step would consume the `\n` portion of a
+ * doubled-`\` + `n` source (`\\n`, 3 bytes from the encoder's
+ * doubling pass) before the `\\\\` → `\` step could reverse the
+ * doubling. Result: user input `\` + `n` (2 bytes) mangled to
+ * `\` + newline on round-trip (limitation #16).
+ *
+ * Unknown escapes (`\X` where X is not in the map) are left
+ * verbatim — matches the encoder's behaviour of only escaping
+ * the chars it knows.
  */
 function unescapeStringValue(value: string): string {
-  return value
-    .replace(/\\n/g, '\n') // Unescape newlines
-    .replace(/\\r/g, '\r') // Unescape carriage returns
-    .replace(/\\t/g, '\t') // Unescape tabs
-    .replace(/\\"/g, '"') // Unescape quotes
-    .replace(/\\\\/g, '\\'); // Unescape backslashes (must be last)
+  return value.replace(/\\(.)/g, (match, char: string) =>
+    Object.prototype.hasOwnProperty.call(ESCAPE_MAP, char) ? ESCAPE_MAP[char] : match
+  );
 }
 
 export interface RomlToken {
