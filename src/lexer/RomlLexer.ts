@@ -1001,7 +1001,11 @@ export class RomlLexer {
       }
       if (!hasEarlierSeparator) {
         const k = extractKey(line.slice(0, firstColonPos));
-        const items = colonRemainder.split(':').map((item) => {
+        // Quote-aware split (limitation #14 residual): a
+        // `:`-bearing item is emitted by the encoder as `"…"` so
+        // its bytes survive the round-trip; plain split on `:`
+        // would shred items containing `:` like `"a:b"` into two.
+        const items = this.splitOutsideQuotes(colonRemainder, ':').map((item) => {
           // Check if item is quoted (can be empty)
           const quotedMatch = item.match(/^"(.*)"$/);
           if (quotedMatch) {
