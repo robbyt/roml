@@ -198,11 +198,12 @@ describe('Round-trip property tests (fast-check)', () => {
  *  8. (Resolved — `isSpecialValue` is checked ahead of the type-
  *     specific branches, so null / undefined / empty-string sentinels
  *     always pick a non-quoting style regardless of the key shape.)
- *  9. BRACKETS-style primitive array containing a string item with
- *     `>` in it: the encoder doesn't escape `>` inside `<value>`
- *     items, so the lexer's `<([^>]*)>` regex splits at the wrong
- *     `>`. We don't know which array style the encoder will pick (it
- *     hashes the key), so any string-array containing `>` is skipped.
+ *  9. (Resolved — BRACKETS items containing `>` or `<` now route
+ *     through the QUOTED-inside-BRACKETS path
+ *     (`<"escaped">`), and the lexer parses items with a
+ *     quote-aware walker that mirrors `splitOutsideQuotes`
+ *     instead of the structurally-limited `<([^>]*)>` regex,
+ *     so `>` inside a quoted item no longer terminates it.)
  * 10. (Resolved — the value-quoted regex sites in
  *     `parseSpecialCases` and the inline-array branches now use
  *     `^"(.*)"$` so the empty `""` is recognised as an empty
@@ -231,16 +232,12 @@ describe('Round-trip property tests (fast-check)', () => {
  *     KV style. Array values under those keys still go through
  *     `selectArrayStyle` and keep their existing routing.)
  * 14. Array items containing separator characters that aren't
- *     escaped by the corresponding inline style — currently only
- *     `:` (COLON_DELIM) and `>` (BRACKETS, see #9) remain. `|`
- *     was resolved by #12 (QUOTED-inside-PIPES). `\` was resolved
- *     by #11 (JSON.parse for JSON_STYLE + escape-state gating in
- *     `splitOutsideQuotes`). `"` was resolved by extending the
- *     PIPES item-quoting check to also flag bare-`"` items (the
- *     #14-residual fix on the heels of #11). The encoder picks
- *     the style by hashing the key, so the screen stays
- *     conservative until each remaining style+separator
- *     combination is fixed.
+ *     escaped by the corresponding inline style — only `:`
+ *     (COLON_DELIM) remains. `|` was resolved by #12,
+ *     `\` by #11, `"` by the #14-residual PIPES fix, `>` by #9.
+ *     The encoder picks the style by hashing the key, so the
+ *     screen stays conservative until the COLON_DELIM `:` case
+ *     is fixed (last item on the inline-array escape ledger).
  * 15. Underscore-bounded line collision: a key that starts/ends with
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
@@ -277,15 +274,13 @@ function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   }
   // (4) Empty arrays of any depth.
   if (arr.length === 0) return true;
-  // (9, 14) Items containing un-escaped separator chars.
-  // `\` was here before #11 was fixed; `"` was here before the
-  // #14-residual PIPES bare-`"` fix. Both now round-trip in
-  // every array style (BRACKETS/COLON_DELIM emit bare,
-  // JSON_STYLE uses `JSON.parse`, PIPES routes via QUOTED).
+  // (14) Items containing un-escaped separator chars. Only `:`
+  // (COLON_DELIM) remains. `\` was resolved by #11, `"` by the
+  // #14-residual PIPES bare-`"` fix, `>` by #9.
   if (
     arr.some(
       (v) =>
-        typeof v === 'string' && /[:>]/.test(v)
+        typeof v === 'string' && /[:]/.test(v)
     )
   ) {
     return true;
@@ -330,13 +325,10 @@ function hasKnownLimitation(input: unknown): boolean {
 
     // (7) and (8) resolved; no constraints needed.
 
-    // (9) Array containing a string with `>` (BRACKETS-style escape).
-    if (
-      Array.isArray(value) &&
-      value.some((v) => typeof v === 'string' && v.includes('>'))
-    ) {
-      return true;
-    }
+    // (9) Resolved — BRACKETS items now route `>`/`<`-bearing
+    //      strings through the QUOTED-inside-BRACKETS path, and
+    //      the lexer parses items with a quote-aware walker
+    //      instead of `<([^>]*)>`. See top-level docstring entry.
 
     // (10) resolved; no constraint needed.
 
@@ -360,15 +352,14 @@ function hasKnownLimitation(input: unknown): boolean {
     //      round-trips cleanly.
 
     // (14) Array items containing un-escaped inline-array separator
-    //      chars that remain open: `:` (COLON_DELIM) and `>`
-    //      (BRACKETS, see #9). `|` was here before #12 was fixed;
-    //      `\` was here before #11; `"` was here before the
-    //      #14-residual PIPES bare-`"` fix.
+    //      chars. Only `:` (COLON_DELIM) remains. `|` was resolved
+    //      by #12, `\` by #11, `"` by the #14-residual PIPES fix,
+    //      `>` by #9.
     if (
       Array.isArray(value) &&
       value.some(
         (v) =>
-          typeof v === 'string' && /[:>]/.test(v)
+          typeof v === 'string' && /[:]/.test(v)
       )
     ) {
       return true;
