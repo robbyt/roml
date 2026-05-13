@@ -501,7 +501,17 @@ export class RomlLexer {
         i++;
         continue;
       }
-      if (char === '\\') {
+      // `\` is an escape introducer ONLY inside a quoted item. The
+      // encoder doubles `\` to `\\` when wrapping a value in
+      // `"..."` (`escapeStringValue`), so inside quotes the next
+      // byte after `\` is part of an escape sequence (`\\`, `\"`,
+      // `\n`, ...) and must not toggle quote state or trigger a
+      // separator split. Outside quotes the encoder emits bytes
+      // verbatim — a bare `\` is just a byte, so we treat it as
+      // such (limitation #11 surfaced this: a PIPES line like
+      // `key||\||false||` was mis-split as one item `\||false`
+      // because the bare `\` consumed the next `|`).
+      if (inQuotes && char === '\\') {
         buffer += char;
         escapeNext = true;
         i++;
@@ -856,8 +866,19 @@ export class RomlLexer {
       for (let i = 0; i < arrayContent.length; i++) {
         const char = arrayContent[i];
 
-        if (char === '"' && (i === 0 || arrayContent[i - 1] !== '\\')) {
-          inQuotes = !inQuotes;
+        if (char === '"') {
+          // A `"` toggles `inQuotes` only when it's NOT escaped. The
+          // naïve check "previous byte isn't `\`" fails on `\\"`
+          // (an escaped backslash followed by a closing quote) —
+          // the previous byte is `\` but it's itself part of an
+          // escape pair. Count consecutive preceding backslashes:
+          // if even (including zero), the `"` is unescaped and
+          // toggles; if odd, it's escaped and doesn't.
+          let bsCount = 0;
+          for (let j = i - 1; j >= 0 && arrayContent[j] === '\\'; j--) bsCount++;
+          if (bsCount % 2 === 0) {
+            inQuotes = !inQuotes;
+          }
           current += char;
         } else if (!inQuotes && char === '[') {
           depth++;
@@ -943,9 +964,21 @@ export class RomlLexer {
   private parseJsonValue(value: string): unknown {
     const trimmed = value.trim();
 
-    // Handle quoted strings - preserve as strings
+    // Handle quoted strings — JSON_STYLE items are emitted via
+    // `JSON.stringify` in the encoder (see RomlConverter ~line 516),
+    // which escapes `\` as `\\`, `"` as `\"`, and control chars as
+    // `\n` / `\r` / `\t` / `\b` / `\f` / `\uXXXX`. `JSON.parse` is
+    // the symmetric inverse. Earlier versions used a bare
+    // `slice(1, -1)`, which left every JSON escape sequence intact
+    // in the returned string (limitation #11). Fall back to the
+    // literal slice if JSON.parse throws on pathological
+    // hand-written input that isn't valid JSON.
     if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-      return trimmed.slice(1, -1); // Remove quotes and return string
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return trimmed.slice(1, -1);
+      }
     }
 
     // Handle special JSON values
