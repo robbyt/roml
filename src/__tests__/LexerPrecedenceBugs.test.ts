@@ -69,6 +69,36 @@ describe('Lexer precedence bugs surfaced at fuzz numRuns=1000', () => {
     });
   });
 
+  describe('Multi-bracket-array gate vs quoted-key `><` (PR #43 fix)', () => {
+    // `{"><": false}` encodes to `"><"<false>` (BRACKETS KV with
+    // a quoted key + boolean value on odd lines). The previous
+    // multi-bracket-array gate `line.includes('><')` fired
+    // because the QUOTED key contains `><`, mis-classifying the
+    // line as a 1-element BRACKETS array. The fix uses
+    // `findSeparatorOutsideQuotes(line, '><')` so the `><`
+    // inside the quoted region is correctly skipped.
+
+    it('round-trips a `><`-keyed boolean false', () => {
+      expect(roundTrip({ '><': false })).toEqual({ '><': false });
+    });
+
+    it('round-trips a `><`-keyed boolean true', () => {
+      expect(roundTrip({ '><': true })).toEqual({ '><': true });
+    });
+
+    it('round-trips a mid-key `><`', () => {
+      expect(roundTrip({ 'a><b': false })).toEqual({ 'a><b': false });
+    });
+
+    it('regression: 2-element BRACKETS array still classifies as array', () => {
+      expect(roundTrip({ elements: ['a', 'b'] })).toEqual({ elements: ['a', 'b'] });
+    });
+
+    it('regression: arity-1 BRACKETS array still classifies as array', () => {
+      expect(roundTrip({ elements: ['only'] })).toEqual({ elements: ['only'] });
+    });
+  });
+
   describe('AMPERSAND vs COLON-array precedence (PR #41 fix 3)', () => {
     // `{token: "::"}` encodes to `&token&::` (TECHNICAL key
     // → AMPERSAND style with `::` scalar). The previous

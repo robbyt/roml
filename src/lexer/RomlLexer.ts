@@ -797,8 +797,19 @@ export class RomlLexer {
     // — a quoted key containing `<` (e.g. `"<-"<false><null>`) has
     // its first `<` inside the quoted region, which is part of
     // the key, not a structural item-start marker.
+    //
+    // The `><`-gate also needs to ignore matches inside a quoted
+    // key region. A KV BRACKETS line with a quoted-key containing
+    // `><` (e.g. `"><"<false>` for `{"><":false}`) has the only
+    // `><` byte sequence INSIDE the quoted key, not between two
+    // structural items. Without the quote-aware check it'd be
+    // mis-classified as a multi-bracket array. Surfaced by
+    // dropping the pinned fuzz seed in PR #43.
     const multiBracketMatch = line.match(/^(.+?)(<.+>)+$/);
-    if (multiBracketMatch && line.includes('><')) {
+    if (
+      multiBracketMatch &&
+      this.findSeparatorOutsideQuotes(line, '><') !== -1
+    ) {
       const firstBracket = this.findSeparatorOutsideQuotes(line, '<');
       if (firstBracket <= 0) {
         // Either no `<` outside quotes, or the line starts with one
