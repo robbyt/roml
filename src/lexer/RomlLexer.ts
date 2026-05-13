@@ -773,24 +773,78 @@ export class RomlLexer {
       }
     }
 
-    // Parse multiple brackets (arrays): key<item1><item2>
+    // Parse multiple brackets (arrays): key<item1><item2>...
+    //
+    // The previous extraction used `matchAll(/<([^>]*)>/g)`, which
+    // was structurally unable to represent `>` inside an item.
+    // Walk the content char-by-char instead, tracking item-state
+    // and quote-state so `<"a>b">` is one item rather than two
+    // (limitation #9). The `\` inside a quoted item is an escape
+    // introducer (mirrors `splitOutsideQuotes`).
+    //
+    // Use `findSeparatorOutsideQuotes` for the key/items boundary
+    // — a quoted key containing `<` (e.g. `"<-"<false><null>`) has
+    // its first `<` inside the quoted region, which is part of
+    // the key, not a structural item-start marker.
     const multiBracketMatch = line.match(/^(.+?)(<.+>)+$/);
     if (multiBracketMatch && line.includes('><')) {
-      const k = extractKey(multiBracketMatch[1]);
-      const items = [...line.matchAll(/<([^>]*)>/g)]
-        .map((match) => match[1])
-        .filter((itemValue) => itemValue !== '') // Filter out empty brackets
+      const firstBracket = this.findSeparatorOutsideQuotes(line, '<');
+      if (firstBracket <= 0) {
+        // Either no `<` outside quotes, or the line starts with one
+        // (no key bytes) — neither is the multi-bracket shape we
+        // handle here. Fall through to other parsers.
+        return null;
+      }
+      const k = extractKey(line.slice(0, firstBracket));
+      const content = line.slice(firstBracket); // starts with `<`, ends with `>`
+
+      const items: string[] = [];
+      let buffer = '';
+      let inItem = false;
+      let inQuotes = false;
+      let escapeNext = false;
+      for (let i = 0; i < content.length; i++) {
+        const c = content[i];
+        if (!inItem) {
+          if (c === '<') inItem = true;
+          continue;
+        }
+        if (escapeNext) {
+          buffer += c;
+          escapeNext = false;
+          continue;
+        }
+        if (inQuotes && c === '\\') {
+          buffer += c;
+          escapeNext = true;
+          continue;
+        }
+        if (c === '"') {
+          buffer += c;
+          inQuotes = !inQuotes;
+          continue;
+        }
+        if (!inQuotes && c === '>') {
+          items.push(buffer);
+          buffer = '';
+          inItem = false;
+          continue;
+        }
+        buffer += c;
+      }
+
+      const processed = items
+        .filter((itemValue) => itemValue !== '') // empty brackets are arity markers
         .map((itemValue) => {
           // Check if item is quoted. `(.*)` so the empty quoted
           // form `""` is recognised as an empty string.
           const quotedMatch = itemValue.match(/^"(.*)"$/);
           if (quotedMatch) {
-            // Preserve quoted values as strings and unescape
             return unescapeStringValue(quotedMatch[1]);
           }
           return this.parseSpecialValue(itemValue);
         });
-      return [k.key, items, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
+      return [k.key, processed, 'BRACKETS', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Single-bracket parsing has moved to `analyzeLineStructure`'s
@@ -853,9 +907,18 @@ export class RomlLexer {
 
     // Parse JSON-style arrays: key["item1",7,"true",true]
     const jsonArrayMatch = line.match(/^(.+?)\[(.+)\]$/);
-    if (jsonArrayMatch && jsonArrayMatch[2].includes(',')) {
-      const k = extractKey(jsonArrayMatch[1]);
-      const arrayContent = jsonArrayMatch[2];
+    if (jsonArrayMatch && jsonArrayMatch[2].includes(',') && line.endsWith(']')) {
+      // Find the key/items boundary at the first `[` OUTSIDE the
+      // quoted-key region. A bare lazy `.+?` finds the first `[`
+      // anywhere, which mis-splits a quoted key containing `[`
+      // (e.g. `"7[J"[null,""]` — the regex captures `"7` as the
+      // key and `J"[null,""` as the array). Same pattern as the
+      // BRACKETS key-boundary fix in this PR.
+      const openIdx = this.findSeparatorOutsideQuotes(line, '[');
+      if (openIdx <= 0) return null;
+      const k = extractKey(line.slice(0, openIdx));
+      const arrayContent = line.slice(openIdx + 1, -1);
+      if (!arrayContent.includes(',')) return null;
 
       // Parse JSON-style array items. Track a running count of
       // consecutive `\` bytes immediately before the cursor so we

@@ -494,8 +494,23 @@ export class RomlConverter {
             if (item === null) return '<__NULL__>';
             if (item === '') return '<__EMPTY__>';
             if (item === undefined) return '<__UNDEFINED__>';
-            // Quote ambiguous strings in arrays
-            if (typeof item === 'string' && this.isAmbiguousString(item)) {
+            // Quote ambiguous strings in arrays. `>` and `<` are
+            // the BRACKETS structural delimiters — a bare `>` in
+            // an item terminates the item early in the lexer, and
+            // `<` can interact with the start marker. `"` is the
+            // quote-tracking delimiter the lexer walker uses, so
+            // a bare middle-`"` (not caught by `isAmbiguousString`)
+            // would put the walker into `inQuotes` and prevent the
+            // closing `>` from ending the item. Route any item
+            // containing any of these through the QUOTED-inside-
+            // BRACKETS path (limitation #9).
+            if (
+              typeof item === 'string' &&
+              (this.isAmbiguousString(item) ||
+                item.includes('>') ||
+                item.includes('<') ||
+                item.includes('"'))
+            ) {
               return `<"${escapeStringValue(item)}">`;
             }
             return `<${item}>`;
