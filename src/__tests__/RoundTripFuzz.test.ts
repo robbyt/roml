@@ -231,15 +231,16 @@ describe('Round-trip property tests (fast-check)', () => {
  *     KV style. Array values under those keys still go through
  *     `selectArrayStyle` and keep their existing routing.)
  * 14. Array items containing separator characters that aren't
- *     escaped by the corresponding inline style — `:` (COLON_DELIM),
- *     `>` (BRACKETS, see #9), `"` (PIPES — bare-`"` items confuse
- *     the lexer's `splitOutsideQuotes` because the encoder only
- *     wraps PIPES items via `isAmbiguousString` (leading/trailing
- *     `"`) or the local `|` check, not bare-middle `"`). `|`
- *     (PIPES bytes inside items) was here before #12 landed; `\`
- *     was here before #11. The encoder picks the style by hashing
- *     the key, so the screen stays conservative until each
- *     remaining style+separator combination is fixed.
+ *     escaped by the corresponding inline style — currently only
+ *     `:` (COLON_DELIM) and `>` (BRACKETS, see #9) remain. `|`
+ *     was resolved by #12 (QUOTED-inside-PIPES). `\` was resolved
+ *     by #11 (JSON.parse for JSON_STYLE + escape-state gating in
+ *     `splitOutsideQuotes`). `"` was resolved by extending the
+ *     PIPES item-quoting check to also flag bare-`"` items (the
+ *     #14-residual fix on the heels of #11). The encoder picks
+ *     the style by hashing the key, so the screen stays
+ *     conservative until each remaining style+separator
+ *     combination is fixed.
  * 15. Underscore-bounded line collision: a key that starts/ends with
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
@@ -277,13 +278,14 @@ function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   // (4) Empty arrays of any depth.
   if (arr.length === 0) return true;
   // (9, 14) Items containing un-escaped separator chars.
-  // `\` was here before #11 was fixed; it now round-trips in
+  // `\` was here before #11 was fixed; `"` was here before the
+  // #14-residual PIPES bare-`"` fix. Both now round-trip in
   // every array style (BRACKETS/COLON_DELIM emit bare,
-  // JSON_STYLE uses `JSON.parse`, PIPES escapes via QUOTED).
+  // JSON_STYLE uses `JSON.parse`, PIPES routes via QUOTED).
   if (
     arr.some(
       (v) =>
-        typeof v === 'string' && /[:>"]/.test(v)
+        typeof v === 'string' && /[:>]/.test(v)
     )
   ) {
     return true;
@@ -358,16 +360,15 @@ function hasKnownLimitation(input: unknown): boolean {
     //      round-trips cleanly.
 
     // (14) Array items containing un-escaped inline-array separator
-    //      chars: `:` (COLON_DELIM), `>` (BRACKETS, see #9), `"`
-    //      (PIPES — bare `"` confuses `splitOutsideQuotes` because
-    //      the encoder only quotes items containing `|` or other
-    //      `isAmbiguousString` triggers, not bare `"`). `|` was
-    //      here before #12 was fixed; `\` was here before #11.
+    //      chars that remain open: `:` (COLON_DELIM) and `>`
+    //      (BRACKETS, see #9). `|` was here before #12 was fixed;
+    //      `\` was here before #11; `"` was here before the
+    //      #14-residual PIPES bare-`"` fix.
     if (
       Array.isArray(value) &&
       value.some(
         (v) =>
-          typeof v === 'string' && /[:>"]/.test(v)
+          typeof v === 'string' && /[:>]/.test(v)
       )
     ) {
       return true;
