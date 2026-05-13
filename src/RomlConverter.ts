@@ -497,15 +497,19 @@ export class RomlConverter {
             // Quote ambiguous strings in arrays. `>` and `<` are
             // the BRACKETS structural delimiters — a bare `>` in
             // an item terminates the item early in the lexer, and
-            // `<` can interact with the start marker. Route any
-            // item containing either through the QUOTED-inside-
-            // BRACKETS path so the lexer's quote-aware walker
-            // treats them as one element (limitation #9).
+            // `<` can interact with the start marker. `"` is the
+            // quote-tracking delimiter the lexer walker uses, so
+            // a bare middle-`"` (not caught by `isAmbiguousString`)
+            // would put the walker into `inQuotes` and prevent the
+            // closing `>` from ending the item. Route any item
+            // containing any of these through the QUOTED-inside-
+            // BRACKETS path (limitation #9).
             if (
               typeof item === 'string' &&
               (this.isAmbiguousString(item) ||
                 item.includes('>') ||
-                item.includes('<'))
+                item.includes('<') ||
+                item.includes('"'))
             ) {
               return `<"${escapeStringValue(item)}">`;
             }
