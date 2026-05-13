@@ -151,6 +151,23 @@ Special values in primitive arrays:
 - empty string → `__EMPTY__`
 - undefined → `__UNDEFINED__`
 
+#### Single-element arity-1 markers
+
+Every inline-array style appends a trailing separator (or empty
+element) so a single-element array is structurally distinguishable
+from a scalar emission of the same shape:
+
+1. **PIPES** (1 item): `key||item||||` (trailing empty `||`)
+2. **BRACKETS** (1 item): `key<item><>` (trailing empty `<>`)
+3. **JSON_STYLE** (1 item): `key["item",]` (trailing `,`)
+4. **COLON_DELIM** (1 item): `key:item:` (trailing `:`)
+
+The marker is dropped by the decoder so the round-tripped array
+keeps its original arity. Items legitimately encoding the empty
+string always go through `__EMPTY__`, never as a bare empty
+element, so the trailing marker is unambiguously a structural
+arity hint rather than user data.
+
 ### Object Arrays
 
 Arrays containing objects use this format:

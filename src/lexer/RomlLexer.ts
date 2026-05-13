@@ -440,7 +440,10 @@ export class RomlLexer {
   }
 
   /**
-   * Find position of separator character outside quoted sections
+   * Find position of separator string outside quoted sections.
+   * Supports both single-char and multi-char (e.g. `||`)
+   * separators — uses `line.startsWith(separator, i)` so the
+   * call site can stay agnostic.
    */
   private findSeparatorOutsideQuotes(line: string, separator: string): number {
     let inQuotes = false;
@@ -454,7 +457,7 @@ export class RomlLexer {
         continue;
       }
 
-      if (char === '\\') {
+      if (inQuotes && char === '\\') {
         escapeNext = true;
         continue;
       }
@@ -464,7 +467,7 @@ export class RomlLexer {
         continue;
       }
 
-      if (!inQuotes && char === separator) {
+      if (!inQuotes && line.startsWith(separator, i)) {
         return i;
       }
     }
@@ -854,55 +857,66 @@ export class RomlLexer {
 
 
     // Parse pipe arrays: key||item1||item2|| (content between pipes can be empty)
-    const pipeArrayMatch = line.match(/^(.+?)\|\|(.*)\|\|$/);
-    if (pipeArrayMatch) {
-      const k = extractKey(pipeArrayMatch[1]);
-      const value = pipeArrayMatch[2];
+    //
+    // The previous `^(.+?)\|\|(.*)\|\|$` regex with a lazy `.+?`
+    // finds the first `||` anywhere in the line — including
+    // inside a quoted key like `"||"`. Use
+    // `findSeparatorOutsideQuotes` for the key/items boundary so
+    // `"||"||only||||` correctly attributes the leading `||` to
+    // the key's quoted content rather than the structural
+    // separator (Copilot review on PR #39; same shape family as
+    // the BRACKETS/JSON_STYLE quoted-key fixes in PR #37).
+    if (line.endsWith('||')) {
+      const openIdx = this.findSeparatorOutsideQuotes(line, '||');
+      if (openIdx > 0) {
+        const k = extractKey(line.slice(0, openIdx));
+        const value = line.slice(openIdx + 2, -2);
 
-      // Quote-aware split (limitation #12): a `|`-bearing value is
-      // emitted by the encoder as `"…"` so the bytes survive the
-      // round-trip; splitting plain on `||` would mis-count items
-      // when an item contains `||` inside its quoted form.
-      const splitItems = this.splitOutsideQuotes(value, '||');
+        // Quote-aware split (limitation #12): a `|`-bearing value
+        // is emitted by the encoder as `"…"` so the bytes survive
+        // the round-trip; splitting plain on `||` would mis-count
+        // items when an item contains `||` inside its quoted form.
+        const splitItems = this.splitOutsideQuotes(value, '||');
 
-      // Multi-item array shape — `value` carries a `||` outside
-      // quotes, so the split returned more than one element.
-      if (splitItems.length > 1) {
-        const items = splitItems
-          .filter((item) => item.trim())
-          .map((item) => {
-            // Check if item is quoted. `(.*)` so `""` parses as ''.
-            const quotedMatch = item.match(/^"(.*)"$/);
-            if (quotedMatch) {
-              // Preserve quoted values as strings and unescape
-              return unescapeStringValue(quotedMatch[1]);
-            }
-            return this.parseSpecialValue(item);
-          });
-        return [k.key, items, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+        // Multi-item array shape — `value` carries a `||` outside
+        // quotes, so the split returned more than one element.
+        if (splitItems.length > 1) {
+          const items = splitItems
+            .filter((item) => item.trim())
+            .map((item) => {
+              // Check if item is quoted. `(.*)` so `""` parses as ''.
+              const quotedMatch = item.match(/^"(.*)"$/);
+              if (quotedMatch) {
+                // Preserve quoted values as strings and unescape
+                return unescapeStringValue(quotedMatch[1]);
+              }
+              return this.parseSpecialValue(item);
+            });
+          return [k.key, items, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+        }
+
+        // Single-item or empty shape (`splitItems` has exactly one
+        // element, equal to `value`).
+
+        // Empty array case: `key||||` — `value` is the empty string.
+        if (value === '') {
+          return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+        }
+
+        // Check if single value is quoted. `(.*)` so `""` parses
+        // as the empty string rather than the literal 2-char `""`.
+        const quotedMatch = value.match(/^"(.*)"$/);
+        const singleValue = quotedMatch
+          ? unescapeStringValue(quotedMatch[1])
+          : this.parseSpecialValue(value);
+
+        // For wrapper keys, single values should still be arrays
+        if (k.key === SYNTHETIC_ITEMS_KEY || k.key === SYNTHETIC_VALUE_KEY) {
+          return [k.key, [singleValue], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
+        }
+
+        return [k.key, singleValue, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
       }
-
-      // Single-item or empty shape (`splitItems` has exactly one
-      // element, equal to `value`).
-
-      // Empty array case: `key||||` — `value` is the empty string.
-      if (value === '') {
-        return [k.key, [], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
-      }
-
-      // Check if single value is quoted. `(.*)` so `""` parses
-      // as the empty string rather than the literal 2-char `""`.
-      const quotedMatch = value.match(/^"(.*)"$/);
-      const singleValue = quotedMatch
-        ? unescapeStringValue(quotedMatch[1])
-        : this.parseSpecialValue(value);
-
-      // For wrapper keys, single values should still be arrays
-      if (k.key === SYNTHETIC_ITEMS_KEY || k.key === SYNTHETIC_VALUE_KEY) {
-        return [k.key, [singleValue], 'PIPES', k.wasQuoted, k.hasPrimePrefix];
-      }
-
-      return [k.key, singleValue, 'PIPES', k.wasQuoted, k.hasPrimePrefix];
     }
 
     // Parse JSON-style arrays: key["item1",7,"true",true]

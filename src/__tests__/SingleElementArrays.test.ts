@@ -30,16 +30,16 @@ describe('Single-element primitive arrays (limitation #3)', () => {
     return RomlFile.romlToJson(RomlFile.jsonToRoml(input));
   }
 
-  // Keys chosen to deterministically route to each style. If the
-  // hash distribution shifts, pick another short key with the
-  // same routing.
-  //   x          -> PIPES        (simpleHash(x) % 4 == 0)
-  //   abc / zzz  -> JSON_STYLE
-  //   elements   -> BRACKETS (SEMANTIC override doesn't apply to
-  //                arrays; falls back to hash; happens to land on
-  //                BRACKETS for `elements`)
-  //   id         -> COLON_DELIM via TECHNICAL semantic hash
-  //                (verified by probe)
+  // Keys chosen to deterministically route to each style via
+  // `selectArrayStyle`, which hashes the key (`simpleHash(key) %
+  // 4`) — semantic categories don't apply to array routing. If
+  // the hash function changes and one of these keys lands on a
+  // different style, swap it for another key whose hash output
+  // selects the intended style.
+  //   x          -> PIPES        (hash bucket 0)
+  //   abc        -> JSON_STYLE   (hash bucket 2)
+  //   elements   -> BRACKETS     (hash bucket 1)
+  //   id         -> COLON_DELIM  (hash bucket 3)
 
   describe('PIPES arity-1 (key `x`)', () => {
     it('round-trips a single-element string array', () => {
@@ -82,6 +82,13 @@ describe('Single-element primitive arrays (limitation #3)', () => {
 
     it('round-trips a single-element boolean array', () => {
       expect(roundTrip({ abc: [true] })).toEqual({ abc: [true] });
+    });
+
+    it('round-trips a single-element empty-string array', () => {
+      // Exercises the `abc["",]` shape: the parser must keep the
+      // legitimate quoted empty item and drop only the trailing
+      // arity-1 marker (Copilot review caught this gap).
+      expect(roundTrip({ abc: [''] })).toEqual({ abc: [''] });
     });
 
     it('regression: 2-element JSON_STYLE still works', () => {
@@ -129,6 +136,30 @@ describe('Single-element primitive arrays (limitation #3)', () => {
       // KV path, not COLON_DELIM. Verify the arity-1 fix doesn't
       // collide.
       expect(roundTrip({ id: 'scalar' })).toEqual({ id: 'scalar' });
+    });
+  });
+
+  describe('PIPES quoted-key boundary (Copilot review on this PR)', () => {
+    // A key containing `||` is quoted by the encoder, but the
+    // pre-fix lexer regex (`^(.+?)\|\|(.*)\|\|$`) found the
+    // first `||` anywhere in the line — including inside the
+    // quoted key. `findSeparatorOutsideQuotes(line, '||')` for
+    // the key/items boundary fixes it; same shape family as the
+    // BRACKETS/JSON_STYLE key-boundary fixes in PR #37.
+
+    it('round-trips a single-element array under a `||`-keyed object', () => {
+      const input = { '||': ['only'] };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('round-trips a multi-element array under a `||`-keyed object', () => {
+      const input = { '||': ['a', 'b'] };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('round-trips an array under a key containing `||` in the middle', () => {
+      const input = { 'a||b': ['only'] };
+      expect(roundTrip(input)).toEqual(input);
     });
   });
 
