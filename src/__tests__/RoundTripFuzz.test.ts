@@ -237,21 +237,17 @@ describe('Round-trip property tests (fast-check)', () => {
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
  *     `_=__NULL__` that the lexer's UNDERSCORE parser claims first.
- * 16. Pre-existing unescape-ordering bug surfaced by relaxed #12/#14
- *     constraints: a key containing the literal 2-char sequences
- *     `\n`, `\r`, or `\t` (backslash followed by `n`/`r`/`t`) is
- *     routed through the QUOTED-key escape pipeline. The encoder's
- *     `escapeForRoml` doubles the leading `\` to `\\`, but the
- *     lexer's chained-replace `unescapeStringValue` matches `\\n` /
- *     `\\r` / `\\t` (3 bytes — the doubled backslash plus the
- *     letter) as the 2-byte escaped form `\n` / `\r` / `\t` BEFORE
- *     the final `\\\\ -> \\` step reverses the doubled backslash,
- *     so the literal mangles into a `\` + control-char pair on
- *     round-trip. Same family of issue as the limitation #11
- *     JSON_STYLE escape mismatch; both want a single-pass walker.
- *     This is independent of the limitation #12 fix; the relaxed
- *     constraints just shifted the seed sequence so fast-check
- *     happens to surface this case now.
+ * 16. (Resolved — `unescapeStringValue` is now a single-pass
+ *     `/\\(.)/g` + escape-map walker, so each `\X` pair is
+ *     resolved atomically. The chained `.replace()` pipeline
+ *     used to mangle literal `\n` / `\r` / `\t` 2-byte
+ *     sequences in keys and quoted values because the
+ *     `\\n -> newline` step would consume the `\n` portion of
+ *     a doubled-backslash source before the `\\\\ -> \\` step
+ *     could reverse the doubling. Walker form resolves each
+ *     escape pair before moving on, eliminating the ordering
+ *     trap. Same fix applies to limitation #11's JSON_STYLE
+ *     escape mismatch as a small follow-up.)
  */
 /**
  * Per-item screens that apply to any array (whether the array is the
@@ -374,12 +370,10 @@ function hasKnownLimitation(input: unknown): boolean {
       return true;
     }
 
-    // (16) Pre-existing unescape-ordering bug — see top-level
-    //      docstring. Until `unescapeStringValue` is rewritten as a
-    //      single-pass walker, any key containing literal `\n`,
-    //      `\r`, or `\t` (the 2-char sequence, not the control
-    //      char) mangles on round-trip through the QUOTED-key path.
-    if (/\\[nrt]/.test(key)) return true;
+    // (16) Resolved — see top-level docstring. `unescapeStringValue`
+    //      is a single-pass walker now, so each `\X` pair is
+    //      resolved atomically and literal `\n`/`\r`/`\t` sequences
+    //      survive the round-trip through the QUOTED escape path.
 
     if (hasKnownLimitation(value)) return true;
   }
