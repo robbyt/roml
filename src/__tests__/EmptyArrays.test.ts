@@ -86,4 +86,96 @@ describe('Empty primitive arrays (limitation #4)', () => {
       expect(roundTrip({ x: ['only'] })).toEqual({ x: ['only'] });
     });
   });
+
+  describe('companion fix: `__proto__` as a value-object key (Copilot review)', () => {
+    // Pre-fix, `RomlParser.objectNodeToData` used
+    // `result[key] = value` which triggers the inherited
+    // prototype setter for `__proto__` (silently rejects the
+    // non-object write). Switched to `Object.defineProperty` so
+    // user-supplied keys become true own properties.
+
+    it('round-trips `__proto__` as a key with a string value', () => {
+      // Build with defineProperty so `__proto__` is an own enumerable
+      // property — fast-check constructs objects this way, but a
+      // JS object literal `{__proto__: " "}` would set the prototype
+      // instead.
+      const inner: Record<string, unknown> = {};
+      Object.defineProperty(inner, '__proto__', {
+        value: ' ',
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      const input = { outer: inner };
+      const round = roundTrip(input) as { outer: Record<string, unknown> };
+      expect(Object.prototype.hasOwnProperty.call(round.outer, '__proto__')).toBe(true);
+      expect(round.outer.__proto__).toBe(' ');
+    });
+
+    it('round-trips a top-level `__proto__` key', () => {
+      const input: Record<string, unknown> = {};
+      Object.defineProperty(input, '__proto__', {
+        value: 'val',
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      const round = roundTrip(input) as Record<string, unknown>;
+      expect(Object.prototype.hasOwnProperty.call(round, '__proto__')).toBe(true);
+      expect(round.__proto__).toBe('val');
+    });
+  });
+
+  describe('companion fix: STATUS-keyed scalars with KV-separator chars (Copilot review)', () => {
+    // STATUS-category keys route to BRACKETS for scalar string
+    // values (`working<value>`), but the lexer's
+    // `analyzeLineStructure` runs the KV-separator scan before
+    // the BRACKETS fallback. Values containing `=:~#%$^+` get
+    // mis-classified as an EQUALS-family KV line. Fix: skip the
+    // STATUS→BRACKETS override for those values (gated on
+    // `!needsQuotes` so already-quoted values still take the
+    // semantic override).
+
+    it('round-trips a STATUS-keyed value containing `^`', () => {
+      expect(roundTrip({ working: '^' })).toEqual({ working: '^' });
+    });
+
+    it('round-trips a STATUS-keyed value containing `~`', () => {
+      expect(roundTrip({ working: '~' })).toEqual({ working: '~' });
+    });
+
+    it('round-trips a STATUS-keyed value containing `#`', () => {
+      expect(roundTrip({ working: '#' })).toEqual({ working: '#' });
+    });
+
+    it('round-trips a STATUS-keyed value containing `=`', () => {
+      expect(roundTrip({ working: '=' })).toEqual({ working: '=' });
+    });
+
+    it('round-trips a STATUS-keyed value containing `:`', () => {
+      expect(roundTrip({ working: ':' })).toEqual({ working: ':' });
+    });
+
+    it('round-trips a STATUS-keyed value with separator in the middle', () => {
+      expect(roundTrip({ working: 'a^b' })).toEqual({ working: 'a^b' });
+    });
+
+    it('regression: STATUS-keyed value WITHOUT separator still uses BRACKETS', () => {
+      // `working` is the STATUS key, value `online` has no
+      // KV-separator, so the override should still apply and
+      // emit BRACKETS shape `working<online>`.
+      const input = { working: 'online' };
+      expect(roundTrip(input)).toEqual(input);
+    });
+
+    it('regression: STATUS-keyed value with newline still uses BRACKETS (via QUOTED-inside-BRACKETS)', () => {
+      // `\n` triggers `isAmbiguousString` → `needsQuotes`. The
+      // gate's `!needsQuotes` clause keeps the BRACKETS
+      // override applied, and the value is wrapped in `"..."`
+      // — separator chars inside quotes are safely ignored by
+      // the lexer.
+      const input = { working: 'a\nb' };
+      expect(roundTrip(input)).toEqual(input);
+    });
+  });
 });

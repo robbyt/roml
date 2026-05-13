@@ -730,14 +730,28 @@ export class RomlConverter {
     // branches pick a non-BRACKETS shape that the lexer's
     // first-separator-wins scan handles correctly. Same shape
     // family as the COLLECTIONS-PIPES skip in #13.
+    //
+    // Only skip when the value would emit UNQUOTED. If
+    // `lineFeatures.needsQuotes` is true (set by
+    // `isAmbiguousString`), the BRACKETS template wraps the
+    // value in `"..."`, and the lexer's
+    // `findSeparatorOutsideQuotes` skips matches inside quotes —
+    // so the override is safe to apply. This minimises wire-
+    // format changes for already-ambiguous values that were
+    // round-tripping cleanly via the quoted form. (Copilot
+    // review refinement on PR #40.)
     const valueHasKVSeparator =
       typeof value === 'string' && /[=:~#%$^+]/.test(value);
+    const bracketsWouldMisparse =
+      semanticStyle === 'BRACKETS' &&
+      valueHasKVSeparator &&
+      !lineFeatures.needsQuotes;
     if (
       semanticStyle &&
       !isEvenLine &&
       valueType === 'string' &&
       semanticStyle !== 'PIPES' &&
-      !(semanticStyle === 'BRACKETS' && valueHasKVSeparator)
+      !bracketsWouldMisparse
     ) {
       return SYNTAX_STYLES[semanticStyle];
     }
