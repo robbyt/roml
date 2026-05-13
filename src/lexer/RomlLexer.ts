@@ -501,7 +501,17 @@ export class RomlLexer {
         i++;
         continue;
       }
-      if (char === '\\') {
+      // `\` is an escape introducer ONLY inside a quoted item. The
+      // encoder doubles `\` to `\\` when wrapping a value in
+      // `"..."` (`escapeStringValue`), so inside quotes the next
+      // byte after `\` is part of an escape sequence (`\\`, `\"`,
+      // `\n`, ...) and must not toggle quote state or trigger a
+      // separator split. Outside quotes the encoder emits bytes
+      // verbatim — a bare `\` is just a byte, so we treat it as
+      // such (limitation #11 surfaced this: a PIPES line like
+      // `key||\||false||` was mis-split as one item `\||false`
+      // because the bare `\` consumed the next `|`).
+      if (inQuotes && char === '\\') {
         buffer += char;
         escapeNext = true;
         i++;
@@ -847,24 +857,40 @@ export class RomlLexer {
       const k = extractKey(jsonArrayMatch[1]);
       const arrayContent = jsonArrayMatch[2];
 
-      // Parse JSON-style array items
+      // Parse JSON-style array items. Track a running count of
+      // consecutive `\` bytes immediately before the cursor so we
+      // can decide in O(1) whether the next `"` is escaped (the
+      // naïve "previous byte isn't `\`" check fails on `\\"` —
+      // an escaped backslash followed by a closing quote — the
+      // previous byte is `\` but it's itself part of an escape
+      // pair). `bsRun` is incremented on `\` and reset to 0 on
+      // every other byte; a `"` is unescaped iff `bsRun` is even.
       const items: unknown[] = [];
       let current = '';
       let inQuotes = false;
       let depth = 0;
+      let bsRun = 0;
 
       for (let i = 0; i < arrayContent.length; i++) {
         const char = arrayContent[i];
 
-        if (char === '"' && (i === 0 || arrayContent[i - 1] !== '\\')) {
-          inQuotes = !inQuotes;
+        if (char === '"') {
+          if (bsRun % 2 === 0) {
+            inQuotes = !inQuotes;
+          }
           current += char;
+          bsRun = 0;
+        } else if (char === '\\') {
+          current += char;
+          bsRun++;
         } else if (!inQuotes && char === '[') {
           depth++;
           current += char;
+          bsRun = 0;
         } else if (!inQuotes && char === ']') {
           depth--;
           current += char;
+          bsRun = 0;
         } else if (!inQuotes && char === ',' && depth === 0) {
           // End of item
           const trimmed = current.trim();
@@ -872,8 +898,10 @@ export class RomlLexer {
             items.push(this.parseJsonValue(trimmed));
           }
           current = '';
+          bsRun = 0;
         } else {
           current += char;
+          bsRun = 0;
         }
       }
 
@@ -943,9 +971,21 @@ export class RomlLexer {
   private parseJsonValue(value: string): unknown {
     const trimmed = value.trim();
 
-    // Handle quoted strings - preserve as strings
+    // Handle quoted strings — JSON_STYLE items are emitted via
+    // `JSON.stringify` in the encoder (see RomlConverter ~line 516),
+    // which escapes `\` as `\\`, `"` as `\"`, and control chars as
+    // `\n` / `\r` / `\t` / `\b` / `\f` / `\uXXXX`. `JSON.parse` is
+    // the symmetric inverse. Earlier versions used a bare
+    // `slice(1, -1)`, which left every JSON escape sequence intact
+    // in the returned string (limitation #11). Fall back to the
+    // literal slice if JSON.parse throws on pathological
+    // hand-written input that isn't valid JSON.
     if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-      return trimmed.slice(1, -1); // Remove quotes and return string
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return trimmed.slice(1, -1);
+      }
     }
 
     // Handle special JSON values

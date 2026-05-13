@@ -207,10 +207,15 @@ describe('Round-trip property tests (fast-check)', () => {
  *     `parseSpecialCases` and the inline-array branches now use
  *     `^"(.*)"$` so the empty `""` is recognised as an empty
  *     string rather than parsed as the literal 2-char value.)
- * 11. JSON_STYLE primitive array containing a string with `"`: the
- *     encoder uses `JSON.stringify` (which escapes the quote as
- *     `\"`) but the parser slices off the outer quotes without
- *     unescaping, so a single `"` round-trips as `\"`.
+ * 11. (Resolved — `parseJsonValue` now uses `JSON.parse(trimmed)`
+ *     as the symmetric inverse of the encoder's `JSON.stringify`,
+ *     so every JSON-defined escape (`\"`, `\\`, `\n`, `\r`, `\t`,
+ *     `\b`, `\f`, `\/`, `\uXXXX`) is handled correctly. The
+ *     JSON-style item-split also now counts consecutive `\` chars
+ *     to distinguish `\\"` (escaped backslash + closing quote)
+ *     from `\"` (escaped quote inside a still-open string). PIPES
+ *     bare-`"`-in-items is a separate pre-existing limitation;
+ *     see (14).)
  * 12. (Resolved for arrays — the PIPES array emitter now quotes
  *     items containing `|`, and the lexer's PIPES content split is
  *     quote-aware via `splitOutsideQuotes`, so `||` inside a quoted
@@ -227,12 +232,14 @@ describe('Round-trip property tests (fast-check)', () => {
  *     `selectArrayStyle` and keep their existing routing.)
  * 14. Array items containing separator characters that aren't
  *     escaped by the corresponding inline style — `:` (COLON_DELIM),
- *     `>` (BRACKETS, see #9), `"` (JSON_STYLE, see #11). `|` (PIPES)
- *     was here before fix #12 landed; it now round-trips via the
- *     QUOTED-inside-PIPES path and is no longer screened.
- *     The encoder picks the style by hashing the key, so we don't
- *     know which one will be used; conservatively skip any array
- *     whose items contain any of those characters.
+ *     `>` (BRACKETS, see #9), `"` (PIPES — bare-`"` items confuse
+ *     the lexer's `splitOutsideQuotes` because the encoder only
+ *     wraps PIPES items via `isAmbiguousString` (leading/trailing
+ *     `"`) or the local `|` check, not bare-middle `"`). `|`
+ *     (PIPES bytes inside items) was here before #12 landed; `\`
+ *     was here before #11. The encoder picks the style by hashing
+ *     the key, so the screen stays conservative until each
+ *     remaining style+separator combination is fixed.
  * 15. Underscore-bounded line collision: a key that starts/ends with
  *     `_` plus a `__NULL__` / `__EMPTY__` / `__UNDEFINED__` sentinel
  *     value (which themselves start/end with `_`) emits a line like
@@ -269,11 +276,14 @@ function arrayItemsHaveKnownLimitation(arr: unknown[]): boolean {
   }
   // (4) Empty arrays of any depth.
   if (arr.length === 0) return true;
-  // (9, 11, 14) Items containing un-escaped separator chars.
+  // (9, 14) Items containing un-escaped separator chars.
+  // `\` was here before #11 was fixed; it now round-trips in
+  // every array style (BRACKETS/COLON_DELIM emit bare,
+  // JSON_STYLE uses `JSON.parse`, PIPES escapes via QUOTED).
   if (
     arr.some(
       (v) =>
-        typeof v === 'string' && /[:>"\\]/.test(v)
+        typeof v === 'string' && /[:>"]/.test(v)
     )
   ) {
     return true;
@@ -328,15 +338,14 @@ function hasKnownLimitation(input: unknown): boolean {
 
     // (10) resolved; no constraint needed.
 
-    // (11) Array containing a string with `"` or `\` (JSON_STYLE
-    //      escape mismatch — encoder uses JSON.stringify but the
-    //      decoder slices off the outer quotes without unescaping).
-    if (
-      Array.isArray(value) &&
-      value.some((v) => typeof v === 'string' && /["\\]/.test(v))
-    ) {
-      return true;
-    }
+    // (11) Resolved — JSON_STYLE items are now round-tripped via
+    //      `JSON.parse` (the symmetric inverse of the encoder's
+    //      `JSON.stringify`), and the item-split now counts
+    //      consecutive `\` chars to correctly identify escaped vs.
+    //      structural `"`. `"` is still in the (14) screen below
+    //      because PIPES has a separate pre-existing bug where
+    //      bare-`"` items confuse the quote-aware split — not
+    //      relevant to #11 itself.
 
     // (12) Resolved for arrays — see top-level docstring. Scalar
     //      `|`-bearing strings under any key (including COLLECTIONS
@@ -349,9 +358,11 @@ function hasKnownLimitation(input: unknown): boolean {
     //      round-trips cleanly.
 
     // (14) Array items containing un-escaped inline-array separator
-    //      chars: `:`, `>`, `"` (already covered by #11 but restated
-    //      here for completeness with the others). `|` was here
-    //      before #12 was fixed.
+    //      chars: `:` (COLON_DELIM), `>` (BRACKETS, see #9), `"`
+    //      (PIPES — bare `"` confuses `splitOutsideQuotes` because
+    //      the encoder only quotes items containing `|` or other
+    //      `isAmbiguousString` triggers, not bare `"`). `|` was
+    //      here before #12 was fixed; `\` was here before #11.
     if (
       Array.isArray(value) &&
       value.some(
