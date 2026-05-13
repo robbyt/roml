@@ -464,15 +464,19 @@ export class RomlConverter {
             if (item === null) return '__NULL__';
             if (item === '') return '__EMPTY__';
             if (item === undefined) return '__UNDEFINED__';
-            // Quote ambiguous strings in arrays. `|` is a PIPES-only
-            // collision (the `||` separator), so it's checked here
-            // rather than in `isAmbiguousString` — keeping it local
-            // avoids forcing scalar `|`-bearing values through the
-            // QUOTED escape pipeline (which would expose a separate
-            // unescape-ordering quirk for literal `\r`/`\n`/`\t`).
+            // Quote ambiguous strings in arrays. `|` is the PIPES
+            // `||`-separator collision (fix #12). `"` is the
+            // lexer's quote-tracking collision (fix #14 residual):
+            // the lexer's `splitOutsideQuotes` toggles `inQuotes`
+            // on bare `"` and so an item like `a"b` (odd-count
+            // internal `"`) leaves the splitter mid-quote and
+            // misses the next `||`. Both are PIPES-only collisions,
+            // so they live here rather than in `isAmbiguousString`.
             if (
               typeof item === 'string' &&
-              (this.isAmbiguousString(item) || item.includes('|'))
+              (this.isAmbiguousString(item) ||
+                item.includes('|') ||
+                item.includes('"'))
             ) {
               return `"${escapeStringValue(item)}"`;
             }
